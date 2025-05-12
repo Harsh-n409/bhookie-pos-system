@@ -205,7 +205,6 @@ export default function KOTPanel({ kotItems, setKotItems }) {
   };
 
   // discount function for existing customers
-  // Update the updateTotals function
   const updateTotals = (items = kotItems) => {
     const subtotal = items.reduce(
       (sum, item) => sum + item.price * item.quantity,
@@ -222,8 +221,9 @@ export default function KOTPanel({ kotItems, setKotItems }) {
       newDiscount = credits;
     } else if (customerId) {
       // Existing customer discount logic
-      newDiscount = Math.min(customerPoints, 20, subtotal);
-    }
+      // STRICTLY limit to maximum 20 points
+      const maxAllowedDiscount = Math.min(20, subtotal);
+      newDiscount = Math.min(customerPoints, maxAllowedDiscount);    }
 
     setDiscount(newDiscount);
     const calculatedTotal = subtotal - newDiscount;
@@ -625,9 +625,10 @@ export default function KOTPanel({ kotItems, setKotItems }) {
     setIsOrderTypeModalOpen(true);
 
     if (customer.points > 0) {
-      const maxCreditsUsable = Math.min(customer.points, subTotal);
-      setDiscount(maxCreditsUsable);
-      setTotal(subTotal - maxCreditsUsable);
+      const maxAllowedDiscount = Math.min(20, subTotal);
+    const actualDiscount = Math.min(customer.points, maxAllowedDiscount);
+    setDiscount(actualDiscount);
+    setTotal(subTotal - actualDiscount);
     } else {
       setDiscount(0);
       setTotal(subTotal);
@@ -636,8 +637,6 @@ export default function KOTPanel({ kotItems, setKotItems }) {
     setIsCustomerModalOpen(false);
     setIsOrderTypeModalOpen(true);
 
-    setIsCustomerModalOpen(false);
-    setIsOrderTypeModalOpen(true);
   };
 
   // Utility function to generate a unique 9-digit user ID
@@ -774,8 +773,8 @@ export default function KOTPanel({ kotItems, setKotItems }) {
           }
 
           const currentPoints = Number(customerDocSnap.data().points) || 0;
-          const pointsToDeduct = discount;
-
+          // Calculate the ACTUAL points to deduct (never more than 20)
+          const pointsToDeduct = Math.min(discount, 20, currentPoints);
           if (currentPoints < pointsToDeduct) {
             throw new Error("Customer doesn't have enough points");
           }
@@ -785,6 +784,10 @@ export default function KOTPanel({ kotItems, setKotItems }) {
             points: newPoints,
             updatedAt: kotTimestamp,
           });
+           // Update the discount to reflect ACTUAL points used
+    // (in case it was different from what was calculated)
+    setDiscount(pointsToDeduct);
+    setTotal(subTotal - pointsToDeduct);
         });
 
         await addDoc(collection(db, "loyaltyHistory"), {
@@ -856,11 +859,11 @@ export default function KOTPanel({ kotItems, setKotItems }) {
             </tbody>
           </table>
           <p><strong>Sub Total:</strong> £${subTotal}</p>
-          <p><strong>Discount:</strong> £${creditsUsed}</p>
+          <p><strong>Discount:</strong> £${discount}</p>
           <p><strong>Total:</strong> £${total - creditsUsed}</p>
           ${
             customerPoints >= 2 && !isEmployee
-              ? `<p style="color: green;">10% discount applied (Points: ${customerPoints})</p>`
+              ? `<p style="color: green;">Discount applied £${discount}(Points remaining: ${customerPoints-discount})</p>`
               : ""
           }
           ${
@@ -1001,9 +1004,9 @@ export default function KOTPanel({ kotItems, setKotItems }) {
         </table>
 
         <div>
-          <p>Sub Total: £{subTotal}</p>
-          <p>Discount: £{discount}</p>
-          <p className="font-bold text-lg">Total: £{total}</p>
+           <p>Sub Total: £{subTotal.toFixed(2)}</p>
+           <p>Discount: £{discount.toFixed(2)}</p>
+           <p className="font-bold text-lg">Total: £{total.toFixed(2)}</p>
         </div>
       </div>
 
