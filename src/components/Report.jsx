@@ -195,12 +195,20 @@ const ReportPage = () => {
       }
 
       const querySnapshot = await getDocs(baseQuery);
-      const newHistory = querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-        date: doc.data().date.toDate(),
-        items: doc.data().items || [],
-      }));
+      const newHistory = querySnapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          date: data.date.toDate(),
+          amount: parseFloat(data.amount) || 0, // Ensure numeric amount
+          items: (data.items || []).map((item) => ({
+            ...item,
+            price: parseFloat(item.price) || 0, // Ensure numeric price
+            quantity: parseInt(item.quantity) || 0, // Ensure numeric quantity
+          })),
+        };
+      });
 
       setKotHistory(newHistory);
     } catch (error) {
@@ -288,7 +296,9 @@ const ReportPage = () => {
     });
 
     // Calculate number of days in selected period
-    const daysInPeriod = differenceInDays(salesEndDate, salesStartDate) + 1;
+    // In summaryData calculation
+    const daysInPeriod =
+      Math.abs(differenceInDays(salesEndDate, salesStartDate)) + 1;
 
     // Calculate averages
     const averageDailySales = totalSales / daysInPeriod;
@@ -925,7 +935,7 @@ const ReportPage = () => {
               <h3>Total Sales</h3>
               <p>
                 {CURRENCY_SYMBOL}
-                {summaryData.totalSales.toFixed(2)}
+                {Number(summaryData.totalSales).toFixed(2)}
               </p>
             </div>
             <div className="summary-card">
@@ -950,14 +960,14 @@ const ReportPage = () => {
               <h3>Average Daily Sales</h3>
               <p>
                 {CURRENCY_SYMBOL}
-                {summaryData.averageDailySales.toFixed(2)}
+                {Number(summaryData.averageDailySales).toFixed(2)}
               </p>
             </div>
             <div className="summary-card">
               <h3>Avg. per Order</h3>
               <p>
                 {CURRENCY_SYMBOL}
-                {summaryData.averagePerOrder.toFixed(2)}
+                {Number(summaryData.averagePerOrder).toFixed(2)}
               </p>
             </div>
           </div>

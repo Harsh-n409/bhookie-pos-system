@@ -63,6 +63,12 @@ export default function KOTPanel({ kotItems, setKotItems }) {
     }
   }, [isPaymentProcessed]);
 
+  useEffect(() => {
+    if (kotItems.length > 0) {
+      updateTotals(kotItems);
+    }
+  }, [kotItems, isEmployee, employeeMealCredits]);
+
   const allowedItems = [
     "Chicken bites",
     "Chicken Drumsticks",
@@ -108,7 +114,6 @@ export default function KOTPanel({ kotItems, setKotItems }) {
   useEffect(() => {
     if (location.state?.selectedEmployee) {
       const employee = location.state.selectedEmployee;
-
       // Pre-fill employee details but don't skip item selection
       setCustomerId(employee.EmployeeID);
       setCustomerName(employee.name);
@@ -128,10 +133,6 @@ export default function KOTPanel({ kotItems, setKotItems }) {
       setIsCustomerModalOpen(false);
     }
   }, [isEmployee, customerId]);
-
-  useEffect(() => {
-    updateTotals();
-  }, [kotItems]);
 
   const handleAutoProcessEmployee = async (employee) => {
     if (employee.isClockedIn) {
@@ -204,23 +205,37 @@ export default function KOTPanel({ kotItems, setKotItems }) {
   };
 
   // discount function for existing customers
+  // Update the updateTotals function
   const updateTotals = (items = kotItems) => {
     const subtotal = items.reduce(
       (sum, item) => sum + item.price * item.quantity,
       0
     );
-    setSubTotal(parseFloat(subtotal)); // Ensure it's stored as a number
+    setSubTotal(parseFloat(subtotal));
 
     let newDiscount = 0;
-    if (customerId && !isEmployee) {
-      const maxCreditsUsable = Math.min(customerPoints,20, subtotal);
-      newDiscount = maxCreditsUsable;
+    let credits = 0;
+
+    if (isEmployee) {
+      // Calculate maximum credits usable for employees
+      credits = Math.min(employeeMealCredits, subtotal);
+      newDiscount = credits;
+    } else if (customerId) {
+      // Existing customer discount logic
+      newDiscount = Math.min(customerPoints, 20, subtotal);
     }
 
-    setDiscount(parseFloat(newDiscount));
-    setTotal(parseFloat(subtotal - newDiscount));
-  };
+    setDiscount(newDiscount);
+    const calculatedTotal = subtotal - newDiscount;
+    setTotal(parseFloat(calculatedTotal));
 
+    // Update creditsUsed and cashDue for employees
+    if (isEmployee) {
+      setCreditsUsed(credits);
+      console.log("updated cashdue");
+      setCashDue(calculatedTotal);
+    }
+  };
   // discount function for new customers
   const applyNewCustomerDiscount = () => {
     const subtotal = kotItems.reduce(
@@ -306,7 +321,7 @@ export default function KOTPanel({ kotItems, setKotItems }) {
 
       // Calculate maximum usable credits
       const maxCredits = Math.min(employeeMealCredits, total);
-      const remaining = total - maxCredits;
+      const remaining = subTotal - maxCredits;
 
       setCreditsUsed(maxCredits);
       setCashDue(remaining);
@@ -728,24 +743,24 @@ export default function KOTPanel({ kotItems, setKotItems }) {
         console.log("updated pending status");
       }
 
-       if (isEmployee && creditsUsed > 0) {
-      const mealRef = doc(db, "Employees", customerId, "meal", "1");
-      
-      await runTransaction(db, async (transaction) => {
-        const mealDoc = await transaction.get(mealRef);
-        if (!mealDoc.exists()) throw new Error("Meal document not found");
-        
-        const currentCredits = mealDoc.data().mealCredits;
-        if (currentCredits < creditsUsed) {
-          throw new Error("Insufficient meal credits");
-        }
-        
-        transaction.update(mealRef, {
-          mealCredits: increment(-creditsUsed),
-          lastUpdated: Timestamp.now()
+      if (isEmployee && creditsUsed > 0) {
+        const mealRef = doc(db, "Employees", customerId, "meal", "1");
+
+        await runTransaction(db, async (transaction) => {
+          const mealDoc = await transaction.get(mealRef);
+          if (!mealDoc.exists()) throw new Error("Meal document not found");
+
+          const currentCredits = mealDoc.data().mealCredits;
+          if (currentCredits < creditsUsed) {
+            throw new Error("Insufficient meal credits");
+          }
+
+          transaction.update(mealRef, {
+            mealCredits: increment(-creditsUsed),
+            lastUpdated: Timestamp.now(),
+          });
         });
-      });
-    }
+      }
 
       // ✅ Deduct loyalty points if applicable (Deduct)
       if (customerId && !isEmployee && discount > 0) {
@@ -765,7 +780,7 @@ export default function KOTPanel({ kotItems, setKotItems }) {
             throw new Error("Customer doesn't have enough points");
           }
           const newPoints = currentPoints - pointsToDeduct;
-          
+
           transaction.update(customerRef, {
             points: newPoints,
             updatedAt: kotTimestamp,
@@ -1214,8 +1229,7 @@ export default function KOTPanel({ kotItems, setKotItems }) {
                       {customer.points >= 2 &&
                         !(isEmployee && customer.isClockedIn) && (
                           <div className="text-green-600 text-sm">
-                             Available Points:{" "}
-                            {customer.points}
+                            Available Points: {customer.points}
                           </div>
                         )}
                     </div>

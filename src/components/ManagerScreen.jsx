@@ -22,7 +22,7 @@ import { useNavigate } from "react-router-dom";
 
 const roleMap = {
   cash01: "cashier",
-  employee:"employee"
+  employee: "employee",
   // Add other role mappings if needed
 };
 
@@ -925,7 +925,10 @@ export default function ManagerScreen() {
                           </td>
                           <td className="p-2 border">{totalItems || 0}</td>
                           <td className="p-2 border">
-                            £{order.amount ? Number(order.amount).toFixed(2) : "0.00"}
+                            £
+                            {order.amount
+                              ? Number(order.amount).toFixed(2)
+                              : "0.00"}
                           </td>
                           <td className="p-2 border">
                             <button
@@ -995,7 +998,8 @@ export default function ManagerScreen() {
                     <tr
                       key={employee.id}
                       className="border-b hover:bg-gray-100 cursor-pointer"
-                      onClick={() =>
+                      onClick={() => {
+                        logout(); // Call your logout function first
                         navigate("/", {
                           state: {
                             selectedEmployee: {
@@ -1007,8 +1011,8 @@ export default function ManagerScreen() {
                               isClockedIn: employee.isClockedIn,
                             },
                           },
-                        })
-                      }
+                        });
+                      }}
                     >
                       <td className="p-2">{employee.name}</td>
                       <td className="p-2">{employee.EmployeeID}</td>
