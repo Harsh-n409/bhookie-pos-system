@@ -223,7 +223,8 @@ export default function KOTPanel({ kotItems, setKotItems }) {
       // Existing customer discount logic
       // STRICTLY limit to maximum 20 points
       const maxAllowedDiscount = Math.min(20, subtotal);
-      newDiscount = Math.min(customerPoints, maxAllowedDiscount);    }
+      newDiscount = Math.min(customerPoints, maxAllowedDiscount);
+    }
 
     setDiscount(newDiscount);
     const calculatedTotal = subtotal - newDiscount;
@@ -319,14 +320,8 @@ export default function KOTPanel({ kotItems, setKotItems }) {
         return;
       }
 
-      // Calculate maximum usable credits
-      const maxCredits = Math.min(employeeMealCredits, total);
-      const remaining = subTotal - maxCredits;
-
-      setCreditsUsed(maxCredits);
-      setCashDue(remaining);
-
-      if (remaining > 0) {
+      // ✅ Use existing cashDue and creditsUpdated from state
+      if (cashDue > 0) {
         setIsPaymentModalOpen(true);
         setPaymentMethod("Meal Credit + Cash");
       } else {
@@ -626,9 +621,9 @@ export default function KOTPanel({ kotItems, setKotItems }) {
 
     if (customer.points > 0) {
       const maxAllowedDiscount = Math.min(20, subTotal);
-    const actualDiscount = Math.min(customer.points, maxAllowedDiscount);
-    setDiscount(actualDiscount);
-    setTotal(subTotal - actualDiscount);
+      const actualDiscount = Math.min(customer.points, maxAllowedDiscount);
+      setDiscount(actualDiscount);
+      setTotal(subTotal - actualDiscount);
     } else {
       setDiscount(0);
       setTotal(subTotal);
@@ -636,7 +631,6 @@ export default function KOTPanel({ kotItems, setKotItems }) {
 
     setIsCustomerModalOpen(false);
     setIsOrderTypeModalOpen(true);
-
   };
 
   // Utility function to generate a unique 9-digit user ID
@@ -784,10 +778,10 @@ export default function KOTPanel({ kotItems, setKotItems }) {
             points: newPoints,
             updatedAt: kotTimestamp,
           });
-           // Update the discount to reflect ACTUAL points used
-    // (in case it was different from what was calculated)
-    setDiscount(pointsToDeduct);
-    setTotal(subTotal - pointsToDeduct);
+          // Update the discount to reflect ACTUAL points used
+          // (in case it was different from what was calculated)
+          setDiscount(pointsToDeduct);
+          setTotal(subTotal - pointsToDeduct);
         });
 
         await addDoc(collection(db, "loyaltyHistory"), {
@@ -801,86 +795,152 @@ export default function KOTPanel({ kotItems, setKotItems }) {
 
       // ✅ Print KOT
       const printContent = `
-        <div style="...">
-          <h3 style="...">KOT</h3>
-          <p><strong>KOT ID:</strong> ${newKOTId}</p>
-          <p><strong>Order Type:</strong> ${
-            orderType === "dine-in" ? "Dine In" : "Takeaway"
-          }</p>
-          ${
-            customerId
-              ? `<p><strong>${
-                  isEmployee ? "Employee" : "Customer"
-                }:</strong> ${customerName} (${customerId})</p>`
-              : ""
-          }
-          ${
-            isEmployee
-              ? `<p><strong>Meal Credits Used:</strong> £${creditsUsed}</p>
-                 ${
-                   cashDue > 0
-                     ? `<p><strong>Cash Paid:</strong> £${cashDue}</p>`
-                     : ""
-                 }`
-              : ""
-          }
-          <table style="width: 100%; border-collapse: collapse;">
-            <thead>
-              <tr>
-                <th style="border: 1px solid #000; padding: 5px;">Item</th>
-                <th style="border: 1px solid #000; padding: 5px;">Qty</th>
-                <th style="border: 1px solid #000; padding: 5px;">Price</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${kotItems
-                .map(
-                  (item) => `
-                  <tr>
-                    <td style="border: 1px solid #000; padding: 5px;">
-                      ${item.name}
-                      ${
-                        item.sauces?.length > 0
-                          ? `<div style="font-size: 10px; color: #555;">${item.sauces.join(
-                              ", "
-                            )}</div>`
-                          : ""
-                      }
-                    </td>
-                    <td style="border: 1px solid #000; padding: 5px;">${
-                      item.quantity
-                    }</td>
-                    <td style="border: 1px solid #000; padding: 5px;">£${
-                      item.quantity * item.price
-                    }</td>
-                  </tr>`
-                )
-                .join("")}
-            </tbody>
-          </table>
-          <p><strong>Sub Total:</strong> £${subTotal}</p>
-          <p><strong>Discount:</strong> £${discount}</p>
-          <p><strong>Total:</strong> £${total - creditsUsed}</p>
-          ${
-            customerPoints >= 2 && !isEmployee
-              ? `<p style="color: green;">Discount applied £${discount}(Points remaining: ${customerPoints-discount})</p>`
-              : ""
-          }
-          ${
-            customerId && !isEmployee
-              ? `<p><strong>Earned Points:</strong> ${earnedPoints}</p>`
-              : ""
-          }
-        </div>
-      `;
+  <div style="
+    width: 280px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    color: #000;
+    padding: 5px;
+  ">
+    <div style="text-align: center; margin-bottom: 5px;">
+      <img src="./logo192.png" alt="Logo" style="width: 50px;" />
+    </div>
+
+    <h3 style="text-align: center; margin: 0; padding: 5px 0;">KOT</h3>
+
+    <p><strong>KOT ID:</strong> ${newKOTId}</p>
+    <p><strong>Order Type:</strong> ${
+      orderType === "dine-in" ? "Dine In" : "Takeaway"
+    }</p>
+    <p><strong>Time:</strong> ${new Date().toLocaleString()}</p>
+
+    ${
+      customerId
+        ? `<p><strong>${
+            isEmployee ? "Employee" : "Customer"
+          }:</strong> ${customerName} (${customerId})</p>`
+        : ""
+    }
+
+    ${
+      isEmployee
+        ? `<p><strong>Meal Credits Used:</strong> £${creditsUsed.toFixed(2)}</p>
+       ${
+         cashDue > 0
+           ? `<p><strong>Cash Due:</strong> £${cashDue.toFixed(2)}</p>`
+           : ""
+       }`
+        : ""
+    }
+
+    <hr style="border: none; border-top: 1px dashed #000; margin: 6px 0;" />
+
+    <table style="width: 100%; border-collapse: collapse;">
+      <thead>
+        <tr>
+          <th style="text-align: left; border-bottom: 1px dashed #000;">Item</th>
+          <th style="text-align: center; border-bottom: 1px dashed #000;">Qty</th>
+          <th style="text-align: right; border-bottom: 1px dashed #000;">Price</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${kotItems
+          .map(
+            (item) => `
+            <tr>
+              <td style="padding: 2px 0;">
+                ${item.name}
+                ${
+                  item.sauces?.length > 0
+                    ? `<div style="font-size: 10px; color: #555;">(${item.sauces.join(
+                        ", "
+                      )})</div>`
+                    : ""
+                }
+              </td>
+              <td style="text-align: center;">${item.quantity}</td>
+              <td style="text-align: right;">£${(
+                item.quantity * item.price
+              ).toFixed(2)}</td>
+            </tr>`
+          )
+          .join("")}
+      </tbody>
+    </table>
+
+    <hr style="border: none; border-top: 1px dashed #000; margin: 6px 0;" />
+
+    <p><strong>Sub Total:</strong> £${subTotal.toFixed(2)}</p>
+    <p><strong>Discount:</strong> £${
+      isEmployee ? creditsUsed.toFixed(2) : subTotal - total
+    }</p>
+    <p><strong>Total:</strong> £${total.toFixed(2)}</p>
+
+    ${
+      customerPoints >= 2 && !isEmployee
+        ? `<p style="color: green;">10% discount applied (Points: ${customerPoints})</p>`
+        : ""
+    }
+
+    ${
+      customerId && !isEmployee
+        ? `<p><strong>Earned Points:</strong> ${earnedPoints}</p>`
+        : ""
+    }
+
+    <hr style="border: none; border-top: 1px dashed #000; margin: 6px 0;" />
+
+    <p style="text-align: center;">--- Thank You ---</p>
+  </div>
+`;
 
       const printWindow = window.open("", "_blank");
       if (printWindow) {
         printWindow.document.open();
-        printWindow.document.write(printContent);
+        printWindow.document.write(`
+    <html>
+      <head>
+        <title>Print KOT</title>
+        <style>
+          body {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            width: 280px;
+            padding: 10px;
+            color: #000;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+          }
+          th, td {
+            padding: 2px 0;
+          }
+          th {
+            border-bottom: 1px dashed #000;
+          }
+          td:nth-child(2), td:nth-child(3) {
+            text-align: center;
+          }
+          td:nth-child(3) {
+            text-align: right;
+          }
+          hr {
+            border-top: 1px dashed #000;
+            margin: 6px 0;
+          }
+          .sauces {
+            font-size: 10px;
+            color: #555;
+          }
+        </style>
+      </head>
+      <body onload="window.print(); window.close();">
+        ${printContent}
+      </body>
+    </html>
+  `);
         printWindow.document.close();
-        printWindow.print();
-        printWindow.close();
       }
 
       clearItems();
@@ -1004,9 +1064,9 @@ export default function KOTPanel({ kotItems, setKotItems }) {
         </table>
 
         <div>
-           <p>Sub Total: £{subTotal.toFixed(2)}</p>
-           <p>Discount: £{discount.toFixed(2)}</p>
-           <p className="font-bold text-lg">Total: £{total.toFixed(2)}</p>
+          <p>Sub Total: £{subTotal.toFixed(2)}</p>
+          <p>Discount: £{discount.toFixed(2)}</p>
+          <p className="font-bold text-lg">Total: £{total.toFixed(2)}</p>
         </div>
       </div>
 
@@ -1336,7 +1396,7 @@ export default function KOTPanel({ kotItems, setKotItems }) {
 
       {showPaymentScreen && (
         <PaymentScreen
-          amount={cashDue}
+          amount={total}
           isEmployee={isEmployee}
           customerPhone={customerPhone}
           onComplete={(success) => {
