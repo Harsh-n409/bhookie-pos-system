@@ -398,11 +398,14 @@ export default function ManagerScreen() {
           today.toDateString();
 
       if (needsReset) {
-        const employeesSnap = await getDocs(collection(db, "Employees"));
+        const employeesSnap = await getDocs(
+          query(collection(db, "users_01"), where("role", "==", "employee"))
+        );
         const updatePromises = [];
 
         for (const empDoc of employeesSnap.docs) {
-          const mealRef = doc(db, "Employees", empDoc.id, "meal", "1");
+          const phone=empDoc.id;
+          const mealRef = doc(db, "user_01", phone, "meal", "1");
           const mealSnap = await getDoc(mealRef);
 
           if (mealSnap.exists()) {
@@ -451,7 +454,9 @@ export default function ManagerScreen() {
 
   const fetchEmployees = async () => {
     try {
-      const snapshot = await getDocs(collection(db, "Employees"));
+      const snapshot = await getDocs(
+        query(collection(db, "users_01"), where("role", "==", "employee"))
+      );
       const today = new Date();
       const monthDocId = `${today.getFullYear()}-${String(
         today.getMonth() + 1
@@ -459,14 +464,17 @@ export default function ManagerScreen() {
       const dayKey = String(today.getDate()).padStart(2, "0");
 
       const employeePromises = snapshot.docs.map(async (empDoc) => {
-        const attendanceDocRef = doc(
-          db,
-          "Employees",
-          empDoc.id,
-          "attendance",
-          monthDocId
-        );
-        const attendanceSnap = await getDoc(attendanceDocRef);
+        const phone = empDoc.id;
+        const data = empDoc.data();
+       const attendanceDocRef = doc(
+        db,
+        "users_01",
+        phone,
+        "attendance",
+        monthDocId
+      );
+      const attendanceSnap = await getDoc(attendanceDocRef);
+
 
         let isClockedIn = false;
         if (attendanceSnap.exists()) {
@@ -475,16 +483,22 @@ export default function ManagerScreen() {
           isClockedIn = todayAttendance.isClockedIn || false;
         }
 
-        const mealRef = doc(db, "Employees", empDoc.id, "meal", "1");
-        const mealSnap = await getDoc(mealRef);
+        const mealRef = doc(db, "users_01", phone, "meal", "1");
+      const mealSnap = await getDoc(mealRef);;
         const mealData = mealSnap.exists() ? mealSnap.data() : {};
 
-        return {
-          id: empDoc.id,
-          ...empDoc.data(),
-          meal: mealData,
-          isClockedIn: isClockedIn,
-        };
+         return {
+        id: phone, // Document ID is phone number
+        employeeID: data.employeeID, // From document field
+        name: data.name,
+        phone: phone,
+        role: data.role,
+        active: data.active,
+        meal: mealSnap.exists() ? mealSnap.data() : {},
+        isClockedIn: attendanceSnap.exists() ? 
+          attendanceSnap.data().days?.[dayKey]?.isClockedIn || false : false
+      };
+
       });
 
       const resolvedData = await Promise.all(employeePromises);
@@ -1003,9 +1017,9 @@ export default function ManagerScreen() {
                         navigate("/", {
                           state: {
                             selectedEmployee: {
-                              id: employee.id,
+                              id: employee.phone,
                               name: employee.name,
-                              EmployeeID: employee.EmployeeID,
+                              EmployeeID: employee.employeeID,
                               phone: employee.phone,
                               mealCredits: employee.meal.mealCredits,
                               isClockedIn: employee.isClockedIn,
