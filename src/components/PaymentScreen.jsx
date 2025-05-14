@@ -101,7 +101,7 @@ const PaymentScreen = ({ amount, isEmployee, onComplete, onClose }) => {
 
           {/* Quick cash + Pay buttons */}
           <div className="w-1/3 p-2 space-y-1">
-            {!isEmployee && quickCashValues.map((value) => (
+            {quickCashValues.map((value) => (
               <button
                 key={value}
                 onClick={() => setTenderedStr(prev => {
