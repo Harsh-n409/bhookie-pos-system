@@ -61,7 +61,7 @@ const itemCategoryMap = {
   "Paneer Burger": "cat05",
   "Noodle Bhel": "cat06",
   "Kulhad Pizza": "cat06",
-  Chai: "cat07",
+  "Chai": "cat07",
   "Filter Coffee": "cat07",
   "Chicken Drumsticks": "cat01",
   "Chicken Bites": "cat01",
