@@ -432,20 +432,20 @@ export default function KOTPanel({ kotItems, setKotItems }) {
       const results = [];
 
       // Process results
-       empPhoneSnap.forEach((doc) => 
-      results.push({ 
-        ...doc.data(),
-        phone: doc.id, // Document ID is phone number
-        isEmployee: true 
-      })
-    );
+      empPhoneSnap.forEach((doc) =>
+        results.push({
+          ...doc.data(),
+          phone: doc.id, // Document ID is phone number
+          isEmployee: true,
+        })
+      );
       empIdSnap.forEach((doc) =>
-      results.push({
-        ...doc.data(),
-        phone: doc.id, // Document ID remains phone number
-        isEmployee: true
-      })
-    );
+        results.push({
+          ...doc.data(),
+          phone: doc.id, // Document ID remains phone number
+          isEmployee: true,
+        })
+      );
       empPhoneSnap.forEach((doc) =>
         results.push({ ...doc.data(), isEmployee: true, EmployeeID: doc.id })
       );
@@ -524,7 +524,6 @@ export default function KOTPanel({ kotItems, setKotItems }) {
       const customersRef = collection(db, "customers");
       const empRef = collection(db, "users_01");
 
-      // Run all queries in parallel
       const [customerPhoneSnap, customerIdSnap, empPhoneSnap, empIdSnap] =
         await Promise.all([
           getDocs(query(customersRef, where("phone", "==", customerSearch))),
@@ -537,7 +536,7 @@ export default function KOTPanel({ kotItems, setKotItems }) {
 
       const manualResults = [];
 
-      // Process customer results
+      // Collect customer results
       customerPhoneSnap.forEach((doc) =>
         manualResults.push({ ...doc.data(), isEmployee: false })
       );
@@ -545,12 +544,12 @@ export default function KOTPanel({ kotItems, setKotItems }) {
         manualResults.push({ ...doc.data(), isEmployee: false })
       );
 
-      // Process employee results
+      // Collect employee results
       empPhoneSnap.forEach((doc) =>
         manualResults.push({
           ...doc.data(),
           isEmployee: true,
-          EmployeeID: doc.id, // Assuming EmployeeID is the document ID
+          EmployeeID: doc.id,
         })
       );
       empIdSnap.forEach((doc) =>
@@ -560,18 +559,20 @@ export default function KOTPanel({ kotItems, setKotItems }) {
           EmployeeID: doc.id,
         })
       );
-      // Check for no results here
+
       if (manualResults.length === 0) {
         alert("No customer or employee found with this ID/phone number.");
         return;
       }
-      // Remove duplicates and check clock-in status
+
+      // Remove duplicates
       const uniqueResults = Array.from(
         new Set(manualResults.map((r) => r.phone || r.EmployeeID))
       ).map((id) =>
         manualResults.find((r) => (r.phone || r.EmployeeID) === id)
       );
 
+      // Check clock-in status
       const finalResults = await Promise.all(
         uniqueResults.map(async (result) => {
           if (result.isEmployee) {
@@ -584,10 +585,9 @@ export default function KOTPanel({ kotItems, setKotItems }) {
         })
       );
 
-      setFoundCustomers(finalResults);
-      const results = await performSearch(customerSearch);
-      setFoundCustomers(results);
+      setFoundCustomers(finalResults); // ✅ This should be the final state update
     } catch (error) {
+      console.error(error);
       alert("Error searching customers");
     }
   };
