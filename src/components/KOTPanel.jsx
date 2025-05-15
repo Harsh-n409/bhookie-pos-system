@@ -156,7 +156,7 @@ export default function KOTPanel({ kotItems, setKotItems }) {
     };
 
     // Set employee details and skip customer modal
-    setCustomerId(employee.EmployeeID);
+    setCustomerId(employee.employeeID);
     setCustomerName(employee.name);
     setCustomerPhone(employee.phone);
     setEmployeeMealCredits(employee.mealCredits);
@@ -419,24 +419,32 @@ export default function KOTPanel({ kotItems, setKotItems }) {
 
     try {
       const customersRef = collection(db, "customers");
-      const empRef = collection(db, "Employees");
+      const empRef = collection(db, "users_01");
 
       const [customerPhoneSnap, customerIdSnap, empPhoneSnap, empIdSnap] =
         await Promise.all([
           getDocs(query(customersRef, where("phone", "==", searchTerm))),
           getDocs(query(customersRef, where("customerID", "==", searchTerm))),
           getDocs(query(empRef, where("phone", "==", searchTerm))),
-          getDocs(query(empRef, where("EmployeeID", "==", searchTerm))),
+          getDocs(query(empRef, where("employeeID", "==", searchTerm))),
         ]);
 
       const results = [];
 
       // Process results
-      customerPhoneSnap.forEach((doc) =>
-        results.push({ ...doc.data(), isEmployee: false })
+      empPhoneSnap.forEach((doc) =>
+        results.push({
+          ...doc.data(),
+          phone: doc.id, // Document ID is phone number
+          isEmployee: true,
+        })
       );
-      customerIdSnap.forEach((doc) =>
-        results.push({ ...doc.data(), isEmployee: false })
+      empIdSnap.forEach((doc) =>
+        results.push({
+          ...doc.data(),
+          phone: doc.id, // Document ID remains phone number
+          isEmployee: true,
+        })
       );
       empPhoneSnap.forEach((doc) =>
         results.push({ ...doc.data(), isEmployee: true, EmployeeID: doc.id })
@@ -485,7 +493,7 @@ export default function KOTPanel({ kotItems, setKotItems }) {
     return `cus${String(number).padStart(2, "0")}`;
   };
 
-  const checkEmployeeClockInStatus = async (employeeId) => {
+  const checkEmployeeClockInStatus = async (employeePhone) => {
     try {
       const today = new Date();
       const monthDocId = `${today.getFullYear()}-${String(
@@ -494,8 +502,8 @@ export default function KOTPanel({ kotItems, setKotItems }) {
       const dayKey = String(today.getDate()).padStart(2, "0");
       const attendanceRef = doc(
         db,
-        "Employees",
-        employeeId,
+        "users_01",
+        employeePhone,
         "attendance",
         monthDocId
       );
@@ -514,9 +522,8 @@ export default function KOTPanel({ kotItems, setKotItems }) {
   const searchCustomer = async () => {
     try {
       const customersRef = collection(db, "customers");
-      const empRef = collection(db, "Employees");
+      const empRef = collection(db, "users_01");
 
-      // Run all queries in parallel
       const [customerPhoneSnap, customerIdSnap, empPhoneSnap, empIdSnap] =
         await Promise.all([
           getDocs(query(customersRef, where("phone", "==", customerSearch))),
@@ -529,7 +536,7 @@ export default function KOTPanel({ kotItems, setKotItems }) {
 
       const manualResults = [];
 
-      // Process customer results
+      // Collect customer results
       customerPhoneSnap.forEach((doc) =>
         manualResults.push({ ...doc.data(), isEmployee: false })
       );
@@ -537,12 +544,12 @@ export default function KOTPanel({ kotItems, setKotItems }) {
         manualResults.push({ ...doc.data(), isEmployee: false })
       );
 
-      // Process employee results
+      // Collect employee results
       empPhoneSnap.forEach((doc) =>
         manualResults.push({
           ...doc.data(),
           isEmployee: true,
-          EmployeeID: doc.id, // Assuming EmployeeID is the document ID
+          EmployeeID: doc.id,
         })
       );
       empIdSnap.forEach((doc) =>
@@ -552,18 +559,20 @@ export default function KOTPanel({ kotItems, setKotItems }) {
           EmployeeID: doc.id,
         })
       );
-      // Check for no results here
+
       if (manualResults.length === 0) {
         alert("No customer or employee found with this ID/phone number.");
         return;
       }
-      // Remove duplicates and check clock-in status
+
+      // Remove duplicates
       const uniqueResults = Array.from(
         new Set(manualResults.map((r) => r.phone || r.EmployeeID))
       ).map((id) =>
         manualResults.find((r) => (r.phone || r.EmployeeID) === id)
       );
 
+      // Check clock-in status
       const finalResults = await Promise.all(
         uniqueResults.map(async (result) => {
           if (result.isEmployee) {
@@ -576,17 +585,16 @@ export default function KOTPanel({ kotItems, setKotItems }) {
         })
       );
 
-      setFoundCustomers(finalResults);
-      const results = await performSearch(customerSearch);
-      setFoundCustomers(results);
+      setFoundCustomers(finalResults); // ✅ This should be the final state update
     } catch (error) {
+      console.error(error);
       alert("Error searching customers");
     }
   };
 
   const handleSelectCustomer = async (customer) => {
     if (customer.isEmployee) {
-      const isClockedIn = await checkEmployeeClockInStatus(customer.EmployeeID);
+      const isClockedIn = await checkEmployeeClockInStatus(customer.employeeID);
       if (isClockedIn) {
         alert("Clocked-in employees cannot use loyalty program!");
         return;
@@ -594,7 +602,7 @@ export default function KOTPanel({ kotItems, setKotItems }) {
 
       // Fetch employee's meal credits
       try {
-        const mealRef = doc(db, "Employees", customer.EmployeeID, "meal", "1");
+        const mealRef = doc(db, "users_01", customer.phone, "meal", "1");
         const mealSnap = await getDoc(mealRef);
         const mealData = mealSnap.exists()
           ? mealSnap.data()
@@ -737,7 +745,7 @@ export default function KOTPanel({ kotItems, setKotItems }) {
       }
 
       if (isEmployee && creditsUsed > 0) {
-        const mealRef = doc(db, "Employees", customerId, "meal", "1");
+        const mealRef = doc(db, "users_01", customerPhone, "meal", "1");
 
         await runTransaction(db, async (transaction) => {
           const mealDoc = await transaction.get(mealRef);
