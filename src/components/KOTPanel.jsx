@@ -1057,7 +1057,7 @@ export default function KOTPanel({ kotItems, setKotItems }) {
                     </button>
                   </div>
                 </td>
-                <td>£{item.quantity * item.price}</td>
+                <td>£{(item.quantity * item.price).toFixed(2)}</td>
                 <td>
                   <button
                     onClick={() => handleRemoveItem(index)}
