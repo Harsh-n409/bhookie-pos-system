@@ -2,10 +2,12 @@ import React, { useState } from "react";
 
 const PaymentScreen = ({ amount, isEmployee, onComplete, onClose }) => {
   const [tenderedStr, setTenderedStr] = useState('');
+  const [paidAmounts, setPaidAmounts] = useState([]);
+  const [remainingAmount, setRemainingAmount] = useState(amount);
+  const [activeMethod, setActiveMethod] = useState(null);
 
   const tendered = parseFloat(tenderedStr || '0');
-  const remainingAmount = Math.max(0, parseFloat((amount - tendered).toFixed(2)));
-  const changeDue = Math.max(0, parseFloat((tendered - amount).toFixed(2)));
+  const changeDue = Math.max(0, parseFloat((tendered - remainingAmount).toFixed(2)));
 
   const quickCashValues = [5, 10, 20, 50];
 
@@ -24,7 +26,46 @@ const PaymentScreen = ({ amount, isEmployee, onComplete, onClose }) => {
     }
   };
 
-  // Final payment process
+  // Process a partial payment
+  const processPartialPayment = (method) => {
+    const enteredAmount = parseFloat(tenderedStr || '0');
+    
+    if (enteredAmount <= 0) {
+      alert("Please enter a valid amount");
+      return;
+    }
+
+    if (enteredAmount > remainingAmount) {
+      alert(`Amount cannot exceed remaining £${remainingAmount.toFixed(2)}`);
+      return;
+    }
+
+    if (isEmployee && enteredAmount.toFixed(2) !== remainingAmount.toFixed(2)) {
+      alert(`Employee must pay exactly £${remainingAmount.toFixed(2)}`);
+      return;
+    }
+
+    // Add to paid amounts
+    setPaidAmounts(prev => [...prev, { amount: enteredAmount, method }]);
+    
+    // Update remaining amount
+    const newRemaining = parseFloat((remainingAmount - enteredAmount).toFixed(2));
+    setRemainingAmount(newRemaining);
+    
+    // Reset input
+    setTenderedStr('');
+    setActiveMethod(null);
+
+    // If fully paid, complete the transaction
+    if (newRemaining <= 0) {
+      setTimeout(() => {
+        onComplete(true);
+        onClose();
+      }, 1000);
+    }
+  };
+
+  // Final payment process (for single payment)
   const processPayment = (method) => {
     const exactAmount = parseFloat(amount.toFixed(2));
     const enteredAmount = parseFloat(tenderedStr || '0');
@@ -34,6 +75,14 @@ const PaymentScreen = ({ amount, isEmployee, onComplete, onClose }) => {
       return;
     }
 
+    if (enteredAmount < exactAmount) {
+      // For non-employees, allow partial payment
+      processPartialPayment(method);
+      return;
+    }
+
+    // Single payment case
+    setPaidAmounts([{ amount: exactAmount, method }]);
     onComplete(true);
     onClose();
   };
@@ -56,6 +105,22 @@ const PaymentScreen = ({ amount, isEmployee, onComplete, onClose }) => {
           </button>
         </div>
 
+        {/* Payment summary - Only show if partial payments exist */}
+        {paidAmounts.length > 0 && (
+          <div className="p-3 space-y-2 border-b">
+            {paidAmounts.map((payment, index) => (
+              <div key={index} className="text-sm">
+                £{payment.amount.toFixed(2)} paid by {payment.method}
+              </div>
+            ))}
+            {remainingAmount > 0 && (
+              <div className="text-lg font-semibold text-red-500">
+                Remaining: £{remainingAmount.toFixed(2)}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Amount summary */}
         <div className="grid grid-cols-3 text-center p-3">
           <div>
@@ -64,7 +129,9 @@ const PaymentScreen = ({ amount, isEmployee, onComplete, onClose }) => {
           </div>
           <div>
             <div className="text-gray-500 text-xs">Remaining</div>
-            <div className="text-lg font-semibold text-red-500">£{remainingAmount.toFixed(2)}</div>
+            <div className="text-lg font-semibold">
+              £{Math.max(0, remainingAmount - tendered).toFixed(2)}
+            </div>
           </div>
           <div>
             <div className="text-gray-500 text-xs">Change</div>
@@ -116,19 +183,20 @@ const PaymentScreen = ({ amount, isEmployee, onComplete, onClose }) => {
 
             {/* Cash Button */}
             <button
-              onClick={() => processPayment("Cash")}
+              onClick={() => remainingAmount > 0 ? processPartialPayment("Cash") : processPayment("Cash")}
               className={`w-full p-2 ${
-                "bg-green-500 hover:bg-green-600"
+                activeMethod === "Cash" ? "bg-green-600" : "bg-green-500 hover:bg-green-600"
               } rounded-md text-white text-sm font-bold`}
-              // disabled={isEmployee && tendered.toFixed(2) !== amount.toFixed(2)}
             >
               Cash
             </button>
 
             {/* Card Button */}
             <button
-              onClick={() => processPayment("Card")}
-              className="w-full p-2 bg-blue-500 hover:bg-blue-600 rounded-md text-white text-sm font-bold"
+              onClick={() => remainingAmount > 0 ? processPartialPayment("Card") : processPayment("Card")}
+              className={`w-full p-2 ${
+                activeMethod === "Card" ? "bg-blue-600" : "bg-blue-500 hover:bg-blue-600"
+              } rounded-md text-white text-sm font-bold`}
             >
               Card
             </button>
