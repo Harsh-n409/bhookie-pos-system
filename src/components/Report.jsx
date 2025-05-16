@@ -718,7 +718,7 @@ const ReportPage = () => {
       Date: kot.date.toLocaleDateString(),
       Time: kot.date.toLocaleTimeString(),
       "Customer ID": kot.customerId ? kot.customerId.split("/")[1] : "Walk-in",
-      Amount: `£${kot.amount.toFixed(2)}`,
+      Amount: `£${Number(kot.amount || 0).toFixed(2)}`, // <-- FIXED LINE
       "Payment Method": kot.paymentMethod,
       "Earned Points": kot.earnedPoints,
       "Items Count": kot.items.length,
