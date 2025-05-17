@@ -545,20 +545,25 @@ export default function KOTPanel({ kotItems, setKotItems }) {
       );
 
       // Collect employee results
-      empPhoneSnap.forEach((doc) =>
+      empPhoneSnap.forEach((doc) => {
+        const data = doc.data();
         manualResults.push({
-          ...doc.data(),
+          ...data,
           isEmployee: true,
-          EmployeeID: doc.id,
-        })
-      );
-      empIdSnap.forEach((doc) =>
+          EmployeeID: data.employeeID, // Use the EmployeeID from document data
+          phone: doc.id, // Document ID is the phone number
+        });
+      });
+
+      empIdSnap.forEach((doc) => {
+        const data = doc.data();
         manualResults.push({
-          ...doc.data(),
+          ...data,
           isEmployee: true,
-          EmployeeID: doc.id,
-        })
-      );
+          EmployeeID: data.employeeID,
+          phone: data.phone, // Phone from document data
+        });
+      });
 
       if (manualResults.length === 0) {
         alert("No customer or employee found with this ID/phone number.");
@@ -594,6 +599,8 @@ export default function KOTPanel({ kotItems, setKotItems }) {
 
   const handleSelectCustomer = async (customer) => {
     if (customer.isEmployee) {
+      setIsEmployee(true);
+      setCustomerId(customer.EmployeeID);
       const isClockedIn = await checkEmployeeClockInStatus(customer.employeeID);
       if (isClockedIn) {
         alert("Clocked-in employees cannot use loyalty program!");
@@ -620,7 +627,7 @@ export default function KOTPanel({ kotItems, setKotItems }) {
     }
 
     // Rest of the existing code...
-    setCustomerId(customer.customerID || customer.EmployeeID);
+    setCustomerId(customer.customerID || customer.employeeID);
     setCustomerPhone(customer.phone);
     setCustomerName(customer.name);
     setCustomerPoints(customer.points || 0);
@@ -641,7 +648,6 @@ export default function KOTPanel({ kotItems, setKotItems }) {
     setIsOrderTypeModalOpen(true);
   };
 
-  // Utility function to generate a unique 9-digit user ID
   const generateNineDigitUserId = async () => {
     const customersRef = collection(db, "customers");
     let userId;
@@ -980,20 +986,18 @@ export default function KOTPanel({ kotItems, setKotItems }) {
         <div className="mb-4 text-base font-semibold text-green-700 border border-green-300 rounded p-2 bg-green-50">
           {isEmployee ? (
             <>
-              Employee: {customerName} ({customerId})
+              Employee: {customerName} (ID: {customerId})
               <p>Meal Credits: £{employeeMealCredits}</p>
               {creditsUsed > 0 && <p>Credits Used: £{creditsUsed}</p>}
               {cashDue > 0 && <p>Cash Due: £{cashDue}</p>}
             </>
           ) : (
             <>
-              Customer: {customerName} ({customerId}) - Credits:{" "}
+              Customer: {customerName} (ID: {customerId}) - Points:{" "}
               {customerPoints}
-              {customerId && !isEmployee && (
+              {discount > 0 && (
                 <p className="text-green-600">
-                  {discount > 0
-                    ? `£${discount} discount applied using credits`
-                    : "No credits used"}
+                  £{discount} discount applied using points
                 </p>
               )}
             </>

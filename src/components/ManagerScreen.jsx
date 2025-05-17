@@ -1029,7 +1029,7 @@ export default function ManagerScreen() {
                       }}
                     >
                       <td className="p-2">{employee.name}</td>
-                      <td className="p-2">{employee.EmployeeID}</td>
+                      <td className="p-2">{employee.employeeID}</td>
                       <td className="p-2">{employee.meal.mealCredits || 0}</td>
                       <td className="p-2">
                         {employee.meal.mealCredits === 0 ? (
