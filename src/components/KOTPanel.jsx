@@ -51,6 +51,8 @@ export default function KOTPanel({ kotItems, setKotItems }) {
   const [orderType, setOrderType] = useState("dine-in"); // Default to 'dine-in'
   const location = useLocation();
   const [isNewCustomerMode, setIsNewCustomerMode] = useState(false);
+  const [earnedPoints, setEarnedPoints] = useState(0);
+
 
   const userId = "1234"; // Replace with logged-in user ID
   // const [autoProcessEmployee, setAutoProcessEmployee] = useState(null);
@@ -229,6 +231,9 @@ export default function KOTPanel({ kotItems, setKotItems }) {
     setDiscount(newDiscount);
     const calculatedTotal = subtotal - newDiscount;
     setTotal(parseFloat(calculatedTotal));
+// ✅ Earned points calculated from fresh total
+  const earnedPoints = Math.floor(calculatedTotal * 0.1);
+  setEarnedPoints(earnedPoints);
 
     // Update creditsUsed and cashDue for employees
     if (isEmployee) {
@@ -244,9 +249,14 @@ export default function KOTPanel({ kotItems, setKotItems }) {
       0
     );
     const discount = Math.min(20, subtotal);
+setDiscount(parseFloat(discount));
 
-    setDiscount(parseFloat(discount));
-    setTotal(parseFloat(subtotal - discount));
+  const calculatedTotal = subtotal - discount;
+  setTotal(parseFloat(calculatedTotal));
+
+  // ✅ Earned points calculated from fresh total
+  const earnedPoints = Math.floor(calculatedTotal * 0.1);
+  setEarnedPoints(earnedPoints);
   };
   const openNumberPad = (index) => {
     setSelectedItemIndex(index);
@@ -719,8 +729,9 @@ export default function KOTPanel({ kotItems, setKotItems }) {
       const newKOTId = await generateKOTId(now);
       setKotId(newKOTId);
 
-      // ✅ Calculate earned points
-      const earnedPoints = Math.floor(total * 0.1);
+     // ✅ Use existing earnedPoints from state
+console.log("Earned Points for this order:", earnedPoints);
+
 
       // ✅ Prepare KOT data
       const data = {
@@ -730,6 +741,8 @@ export default function KOTPanel({ kotItems, setKotItems }) {
         customerID: customerId || null,
         creditsUsed: isEmployee ? creditsUsed : 0,
         cashPaid: isEmployee ? cashDue : total,
+          earnedPoints: earnedPoints, // ✅ add earnedPoints here
+
         items: kotItems.map((item) => ({
           id: item.id,
           name: item.name,
