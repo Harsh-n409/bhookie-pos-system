@@ -405,7 +405,7 @@ export default function ManagerScreen() {
 
         for (const empDoc of employeesSnap.docs) {
           const phone=empDoc.id;
-          const mealRef = doc(db, "user_01", phone, "meal", "1");
+          const mealRef = doc(db, "users_01", phone, "meal", "1");
           const mealSnap = await getDoc(mealRef);
 
           if (mealSnap.exists()) {
