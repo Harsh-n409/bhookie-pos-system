@@ -531,7 +531,7 @@ export default function KOTPanel({ kotItems, setKotItems }) {
             query(customersRef, where("customerID", "==", customerSearch))
           ),
           getDocs(query(empRef, where("phone", "==", customerSearch))),
-          getDocs(query(empRef, where("EmployeeID", "==", customerSearch))),
+          getDocs(query(empRef, where("employeeID", "==", customerSearch))),
         ]);
 
       const manualResults = [];
