@@ -51,6 +51,8 @@ export default function KOTPanel({ kotItems, setKotItems }) {
   const [orderType, setOrderType] = useState("dine-in"); // Default to 'dine-in'
   const location = useLocation();
   const [isNewCustomerMode, setIsNewCustomerMode] = useState(false);
+  const [earnedPoints, setEarnedPoints] = useState(0);
+
 
   const userId = "1234"; // Replace with logged-in user ID
   // const [autoProcessEmployee, setAutoProcessEmployee] = useState(null);
@@ -229,6 +231,9 @@ export default function KOTPanel({ kotItems, setKotItems }) {
     setDiscount(newDiscount);
     const calculatedTotal = subtotal - newDiscount;
     setTotal(parseFloat(calculatedTotal));
+// ✅ Earned points calculated from fresh total
+  const earnedPoints = Math.floor(calculatedTotal * 0.1);
+  setEarnedPoints(earnedPoints);
 
     // Update creditsUsed and cashDue for employees
     if (isEmployee) {
@@ -244,9 +249,14 @@ export default function KOTPanel({ kotItems, setKotItems }) {
       0
     );
     const discount = Math.min(20, subtotal);
+setDiscount(parseFloat(discount));
 
-    setDiscount(parseFloat(discount));
-    setTotal(parseFloat(subtotal - discount));
+  const calculatedTotal = subtotal - discount;
+  setTotal(parseFloat(calculatedTotal));
+
+  // ✅ Earned points calculated from fresh total
+  const earnedPoints = Math.floor(calculatedTotal * 0.1);
+  setEarnedPoints(earnedPoints);
   };
   const openNumberPad = (index) => {
     setSelectedItemIndex(index);
@@ -702,6 +712,8 @@ export default function KOTPanel({ kotItems, setKotItems }) {
   };
 
   const handleGenerateKOT = async () => {
+    let pointsToDeduct = 0;
+        let updatedPoints = 0;
     if (!isPaymentProcessed) {
       alert("Please process payment before saving KOT.");
       return;
@@ -719,8 +731,9 @@ export default function KOTPanel({ kotItems, setKotItems }) {
       const newKOTId = await generateKOTId(now);
       setKotId(newKOTId);
 
-      // ✅ Calculate earned points
-      const earnedPoints = Math.floor(total * 0.1);
+     // ✅ Use existing earnedPoints from state
+console.log("Earned Points for this order:", earnedPoints);
+
 
       // ✅ Prepare KOT data
       const data = {
@@ -730,6 +743,7 @@ export default function KOTPanel({ kotItems, setKotItems }) {
         customerID: customerId || null,
         creditsUsed: isEmployee ? creditsUsed : 0,
         cashPaid: isEmployee ? cashDue : total,
+        earnedPoints: earnedPoints,
         items: kotItems.map((item) => ({
           id: item.id,
           name: item.name,
@@ -772,7 +786,8 @@ export default function KOTPanel({ kotItems, setKotItems }) {
       // ✅ Deduct loyalty points if applicable (Deduct)
       if (customerId && !isEmployee && discount > 0) {
         const customerRef = doc(db, "customers", customerPhone);
-
+        
+        
         await runTransaction(db, async (transaction) => {
           const customerDocSnap = await transaction.get(customerRef);
 
@@ -782,26 +797,25 @@ export default function KOTPanel({ kotItems, setKotItems }) {
 
           const currentPoints = Number(customerDocSnap.data().points) || 0;
           // Calculate the ACTUAL points to deduct (never more than 20)
-          const pointsToDeduct = Math.min(discount, 20, currentPoints);
+          pointsToDeduct = Math.min(discount, 20, currentPoints);
           if (currentPoints < pointsToDeduct) {
             throw new Error("Customer doesn't have enough points");
           }
-          const newPoints = currentPoints - pointsToDeduct;
+          const afterDeduction = currentPoints - pointsToDeduct;
 
+          // 2️⃣ Add earned points
+          updatedPoints = afterDeduction + earnedPoints;
           transaction.update(customerRef, {
-            points: newPoints,
+            points: updatedPoints,
             updatedAt: kotTimestamp,
           });
-          // Update the discount to reflect ACTUAL points used
-          // (in case it was different from what was calculated)
-          setDiscount(pointsToDeduct);
-          setTotal(subTotal - pointsToDeduct);
+          
         });
 
         await addDoc(collection(db, "loyaltyHistory"), {
           customerID: customerId,
           type: "redeem",
-          points: discount,
+          points: pointsToDeduct,
           orderID: newKOTId,
           date: kotTimestamp,
         });
@@ -892,7 +906,7 @@ export default function KOTPanel({ kotItems, setKotItems }) {
 
     ${
       customerPoints >= 2 && !isEmployee
-        ? `<p style="color: green;">10% discount applied (Points: ${customerPoints})</p>`
+        ? `<p style="color: green;"> Discount applied: ${pointsToDeduct} (Remaining Points: ${updatedPoints})</p>`
         : ""
     }
 
