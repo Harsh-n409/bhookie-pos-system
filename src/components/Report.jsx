@@ -190,7 +190,7 @@ const ReportPage = () => {
       if (paymentFilter !== "all") {
         baseQuery = query(
           baseQuery,
-          where("paymentMethod", "==", paymentFilter)
+          where("methodOfPayment", "==", paymentFilter)
         );
       }
 
@@ -207,6 +207,7 @@ const ReportPage = () => {
             price: parseFloat(item.price) || 0, // Ensure numeric price
             quantity: parseInt(item.quantity) || 0, // Ensure numeric quantity
           })),
+          methodOfPayment:data.methodOfPayment,
         };
       });
 
@@ -629,7 +630,7 @@ const ReportPage = () => {
           earnedPoints: data.earnedPoints || 0,
           userId: data.user_id,
           items: data.items || [],
-          paymentMethod: data.paymentMethod || "unknown",
+          methodOfPayment: data.methodOfPayment || "unknown",
         });
       });
 
@@ -668,6 +669,7 @@ const ReportPage = () => {
                 price: item.price || 0,
               }))
             : [],
+            methodOfPayment:kotData.methodOfPayment,
         });
         setIsDetailModalOpen(true);
       }
@@ -1292,7 +1294,7 @@ const ReportPage = () => {
                       </td>
                       <td>{formatCustomerId(kot.customerId)}</td>
                       <td>£{Number(kot.amount).toFixed(2)}</td>
-                      <td>{kot.paymentMethod}</td>
+                      <td>{kot.methodOfPayment || "unknown"}</td>
                       <td>{kot.earnedPoints}</td>
                       <td>{kot.items.length}</td>
                       <td>
@@ -1338,7 +1340,7 @@ const ReportPage = () => {
                 </div>
                 <div>
                   <p className="font-semibold">Payment Method:</p>
-                  <p>{selectedKOT.paymentMethod || "unknown"}</p>
+                  <p>{selectedKOT.methodOfPayment || "unknown"}</p>
                 </div>
                 <div>
                   <p className="font-semibold">User ID:</p>

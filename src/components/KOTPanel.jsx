@@ -53,7 +53,6 @@ export default function KOTPanel({ kotItems, setKotItems }) {
   const [isNewCustomerMode, setIsNewCustomerMode] = useState(false);
   const [earnedPoints, setEarnedPoints] = useState(0);
 
-
   const userId = "1234"; // Replace with logged-in user ID
   // const [autoProcessEmployee, setAutoProcessEmployee] = useState(null);
 
@@ -231,10 +230,12 @@ export default function KOTPanel({ kotItems, setKotItems }) {
     setDiscount(newDiscount);
     const calculatedTotal = subtotal - newDiscount;
     setTotal(parseFloat(calculatedTotal));
-// ✅ Earned points calculated from fresh total
-  const earnedPoints = Math.floor(calculatedTotal * 0.1);
-  setEarnedPoints(earnedPoints);
-
+    // ✅ Earned points calculated from fresh total
+    let earned = 0;
+    if (customerId && !isEmployee) {
+      earned = Math.floor(calculatedTotal * 0.1);
+    }
+    setEarnedPoints(earned);
     // Update creditsUsed and cashDue for employees
     if (isEmployee) {
       setCreditsUsed(credits);
@@ -249,14 +250,14 @@ export default function KOTPanel({ kotItems, setKotItems }) {
       0
     );
     const discount = Math.min(20, subtotal);
-setDiscount(parseFloat(discount));
+    setDiscount(parseFloat(discount));
 
-  const calculatedTotal = subtotal - discount;
-  setTotal(parseFloat(calculatedTotal));
+    const calculatedTotal = subtotal - discount;
+    setTotal(parseFloat(calculatedTotal));
 
-  // ✅ Earned points calculated from fresh total
-  const earnedPoints = Math.floor(calculatedTotal * 0.1);
-  setEarnedPoints(earnedPoints);
+    // ✅ Earned points calculated from fresh total
+    const earnedPoints = Math.floor(calculatedTotal * 0.1);
+    setEarnedPoints(earnedPoints);
   };
   const openNumberPad = (index) => {
     setSelectedItemIndex(index);
@@ -713,7 +714,7 @@ setDiscount(parseFloat(discount));
 
   const handleGenerateKOT = async () => {
     let pointsToDeduct = 0;
-        let updatedPoints = 0;
+    let updatedPoints = 0;
     if (!isPaymentProcessed) {
       alert("Please process payment before saving KOT.");
       return;
@@ -731,9 +732,8 @@ setDiscount(parseFloat(discount));
       const newKOTId = await generateKOTId(now);
       setKotId(newKOTId);
 
-     // ✅ Use existing earnedPoints from state
-console.log("Earned Points for this order:", earnedPoints);
-
+      // ✅ Use existing earnedPoints from state
+      console.log("Earned Points for this order:", earnedPoints);
 
       // ✅ Prepare KOT data
       const data = {
@@ -786,8 +786,7 @@ console.log("Earned Points for this order:", earnedPoints);
       // ✅ Deduct loyalty points if applicable (Deduct)
       if (customerId && !isEmployee && discount > 0) {
         const customerRef = doc(db, "customers", customerPhone);
-        
-        
+
         await runTransaction(db, async (transaction) => {
           const customerDocSnap = await transaction.get(customerRef);
 
@@ -809,7 +808,6 @@ console.log("Earned Points for this order:", earnedPoints);
             points: updatedPoints,
             updatedAt: kotTimestamp,
           });
-          
         });
 
         await addDoc(collection(db, "loyaltyHistory"), {
@@ -1246,6 +1244,7 @@ console.log("Earned Points for this order:", earnedPoints);
                   className="border p-2 mb-4 w-full"
                   placeholder="Phone Number"
                   value={customerPhone}
+                  maxLength={10}
                   onChange={(e) => setCustomerPhone(e.target.value)}
                 />
                 <div className="flex justify-end gap-2">

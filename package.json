@@ -11,6 +11,7 @@
     "firebase": "^11.6.0",
     "jspdf": "^3.0.1",
     "jspdf-autotable": "^5.0.2",
+    "node-cron": "^4.0.5",
     "postcss-flexbugs-fixes": "^5.0.2",
     "postcss-normalize": "^13.0.1",
     "postcss-preset-env": "^10.1.6",
