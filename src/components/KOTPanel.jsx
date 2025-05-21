@@ -181,7 +181,7 @@ export default function KOTPanel({ kotItems, setKotItems }) {
             inventoryData;
 
           // Calculate total units sold
-          const totalUnitsSold = item.quantity * unitsPerInner;
+          const totalUnitsSold = item.quantity;
 
           // Calculate new stock values
           const newTotalStock = totalStockOnHand - totalUnitsSold;
@@ -202,6 +202,31 @@ export default function KOTPanel({ kotItems, setKotItems }) {
     } catch (error) {
       console.error("Error updating inventory:", error);
       throw error;
+    }
+  };
+
+  const checkStockAvailability = async (items) => {
+    try {
+      const stockErrors = [];
+
+      for (const item of items) {
+        const itemRef = doc(db, "inventory", item.id);
+        const itemSnap = await getDoc(itemRef);
+
+        if (itemSnap.exists()) {
+          const currentStock = itemSnap.data().totalStockOnHand;
+          if (item.quantity > currentStock) {
+            stockErrors.push(`${item.name} (Available: ${currentStock})`);
+          }
+        } else {
+          stockErrors.push(`${item.name} (Not found in inventory)`);
+        }
+      }
+
+      return stockErrors;
+    } catch (error) {
+      console.error("Stock check error:", error);
+      return ["Inventory check failed"];
     }
   };
 
@@ -314,7 +339,7 @@ export default function KOTPanel({ kotItems, setKotItems }) {
   };
 
   // Modify handlePayClick
-  const handlePayClick = () => {
+  const handlePayClick =async () => {
     if (kotItems.length === 0) {
       alert("Please add items before payment");
       return;
@@ -322,6 +347,12 @@ export default function KOTPanel({ kotItems, setKotItems }) {
 
     if (!orderType) {
       alert("Please select order type (Dine In/Takeaway)");
+      return;
+    }
+
+    const stockErrors = await checkStockAvailability(kotItems);
+    if (stockErrors.length > 0) {
+      alert(`Cannot process payment:\n${stockErrors.join("\n")}`);
       return;
     }
 
@@ -721,6 +752,13 @@ export default function KOTPanel({ kotItems, setKotItems }) {
     }
 
     try {
+      const stockErrors = await checkStockAvailability(kotItems);
+
+      if (stockErrors.length > 0) {
+        alert(`Insufficient stock:\n${stockErrors.join("\n")}`);
+        setIsPaymentProcessed(false);
+        return;
+      }
       // ✅ Ensure consistent timestamp
       const now = new Date();
       const kotTimestamp = Timestamp.fromDate(now);
@@ -1018,75 +1056,75 @@ export default function KOTPanel({ kotItems, setKotItems }) {
       )}
 
       <div className="border p-3 rounded mb-3 bg-white flex flex-col max-h-[300px]">
-         <div className="overflow-y-auto flex-1 mb-3">
-        <table className="w-full text-left mb-3">
-          <thead>
-            <tr>
-              <th>ITEM</th>
-              <th>QUANTITY</th>
-              <th>PRICE</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {kotItems.map((item, index) => (
-              <tr key={index}>
-                <td>
-                  {item.name}
-                  {item.sauces?.length > 0 && (
-                    <div className="text-sm text-gray-500">
-                      {item.sauces.join(", ")}
-                    </div>
-                  )}
-                </td>
-                <td>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => {
-                        const updated = [...kotItems];
-                        updated[index].quantity = Math.max(
-                          updated[index].quantity - 1,
-                          1
-                        );
-                        setKotItems(updated);
-                        updateTotals(updated);
-                      }}
-                      className="bg-gray-300 text-xl w-6 h-6 rounded-full flex items-center justify-center"
-                    >
-                      -
-                    </button>
-                    <button
-                      onClick={() => openNumberPad(index)}
-                      className="bg-gray-100 text-xl w-6 h-6 rounded-full flex items-center justify-center"
-                    >
-                      {item.quantity}
-                    </button>
-                    <button
-                      onClick={() => {
-                        const updated = [...kotItems];
-                        updated[index].quantity += 1;
-                        setKotItems(updated);
-                        updateTotals(updated);
-                      }}
-                      className="bg-gray-300 text-xl w-6 h-6 rounded-full flex items-center justify-center"
-                    >
-                      +
-                    </button>
-                  </div>
-                </td>
-                <td>£{(item.quantity * item.price).toFixed(2)}</td>
-                <td>
-                  <button
-                    onClick={() => handleRemoveItem(index)}
-                    className="text-red-600"
-                  >
-                    ❌
-                  </button>
-                </td>
+        <div className="overflow-y-auto flex-1 mb-3">
+          <table className="w-full text-left mb-3">
+            <thead>
+              <tr>
+                <th>ITEM</th>
+                <th>QUANTITY</th>
+                <th>PRICE</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {kotItems.map((item, index) => (
+                <tr key={index}>
+                  <td>
+                    {item.name}
+                    {item.sauces?.length > 0 && (
+                      <div className="text-sm text-gray-500">
+                        {item.sauces.join(", ")}
+                      </div>
+                    )}
+                  </td>
+                  <td>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          const updated = [...kotItems];
+                          updated[index].quantity = Math.max(
+                            updated[index].quantity - 1,
+                            1
+                          );
+                          setKotItems(updated);
+                          updateTotals(updated);
+                        }}
+                        className="bg-gray-300 text-xl w-6 h-6 rounded-full flex items-center justify-center"
+                      >
+                        -
+                      </button>
+                      <button
+                        onClick={() => openNumberPad(index)}
+                        className="bg-gray-100 text-xl w-6 h-6 rounded-full flex items-center justify-center"
+                      >
+                        {item.quantity}
+                      </button>
+                      <button
+                        onClick={() => {
+                          const updated = [...kotItems];
+                          updated[index].quantity += 1;
+                          setKotItems(updated);
+                          updateTotals(updated);
+                        }}
+                        className="bg-gray-300 text-xl w-6 h-6 rounded-full flex items-center justify-center"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </td>
+                  <td>£{(item.quantity * item.price).toFixed(2)}</td>
+                  <td>
+                    <button
+                      onClick={() => handleRemoveItem(index)}
+                      className="text-red-600"
+                    >
+                      ❌
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
 
         <div>
@@ -1096,7 +1134,7 @@ export default function KOTPanel({ kotItems, setKotItems }) {
         </div>
       </div>
 
-       <div className="grid grid-cols-2 gap-1 mt-auto">
+      <div className="grid grid-cols-2 gap-1 mt-auto">
         {/* PAY Button */}
         <button
           onClick={handlePayClick}
