@@ -1017,7 +1017,7 @@ export default function KOTPanel({ kotItems, setKotItems }) {
         </div>
       )}
 
-      <div className="border p-3 rounded mb-3 bg-white flex flex-col h-[300px]">
+      <div className="border p-3 rounded mb-3 bg-white flex flex-col max-h-[300px]">
          <div className="overflow-y-auto flex-1 mb-3">
         <table className="w-full text-left mb-3">
           <thead>
