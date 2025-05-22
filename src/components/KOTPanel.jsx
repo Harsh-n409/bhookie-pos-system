@@ -737,6 +737,7 @@ export default function KOTPanel({ kotItems, setKotItems }) {
       setIsPaymentModalOpen(true);
       setIsNewCustomer(false);
       applyNewCustomerDiscount();
+	  setIsOrderTypeModalOpen(true);
     } catch (error) {
       console.error("Error creating customer:", error);
       alert("Error creating customer");
