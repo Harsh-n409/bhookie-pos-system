@@ -36,6 +36,8 @@ const roleMap = {
   manage01: "manager",
   cashier: "cashier",
   manager: "manager",
+  teamleader:"teamleader",
+  admin:"admin"
 };
 
 const CURRENCY_SYMBOL = "£";
@@ -464,7 +466,7 @@ const ReportPage = () => {
             Object.keys(roleMap).find((key) => key.toLowerCase() === roleCode)
           ];
 
-        if (role === "manager") {
+        if (role === "manager" || role==="admin" || role === "teamleader") {
           setIsAuthenticated(true);
         } else {
           alert("Only managers can access this page.");
@@ -1026,8 +1028,8 @@ const ReportPage = () => {
             <button className="export-btn" onClick={handlePrintReport}>
               Print Report
             </button>
-            <button className="export-btn" onClick={handleExitClick}>
-              Back to POS
+            <button className="export-btn" onClick={() => setCurrentView("home")}>
+              Back
             </button>
           </div>
 

@@ -8,7 +8,9 @@ const roleMap = {
   cash01: "cashier",
   manage01: "manager",
   cashier: "cashier",
-  manager: "manager"
+  manager: "manager",
+  teamleader:"teamleader",
+  admin:"admin"
 };
 
 export default function ManagerLogin() {
@@ -64,7 +66,7 @@ export default function ManagerLogin() {
             role 
           });
   
-          if (role === "manager") {
+          if (role === "manager" || role === "admin" || role=== "teamleader") {
             navigate("/manager");
           } else {
             navigate("/"); // Default redirect for other roles
