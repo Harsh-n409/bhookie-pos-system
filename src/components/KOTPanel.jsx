@@ -395,9 +395,9 @@ export default function KOTPanel({ kotItems, setKotItems }) {
     const number = snapshot.size + 1;
 
     // Generate prefix: DDMMYY
-    const prefix = `${String(dateObj.getDate()).padStart(2, "0")}${String(
+const prefix = `${String(dateObj.getFullYear()).slice(-2)}${String(
       dateObj.getMonth() + 1
-    ).padStart(2, "0")}${String(dateObj.getFullYear()).slice(-2)}`;
+    ).padStart(2, "0")}${String(dateObj.getDate()).padStart(2, "0")}`;
 
     return `${prefix}${String(number).padStart(3, "0")}`; // e.g. 050525001
   };
