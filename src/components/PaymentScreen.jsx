@@ -1,10 +1,16 @@
-import React, { useState } from "react";
+
+
+import React, { useState, useEffect } from "react";
 
 const PaymentScreen = ({ amount, isEmployee, onComplete, onClose }) => {
   const [tenderedStr, setTenderedStr] = useState('');
   const [paidAmounts, setPaidAmounts] = useState([]);
   const [remainingAmount, setRemainingAmount] = useState(amount);
   const [activeMethod, setActiveMethod] = useState(null);
+
+  useEffect(() => {
+    setRemainingAmount(amount);
+  }, [amount]);
 
   const tendered = parseFloat(tenderedStr || '0');
   const changeDue = Math.max(0, parseFloat((tendered - remainingAmount).toFixed(2)));
@@ -183,7 +189,14 @@ const PaymentScreen = ({ amount, isEmployee, onComplete, onClose }) => {
 
             {/* Cash Button */}
             <button
-              onClick={() => remainingAmount > 0 ? processPartialPayment("Cash") : processPayment("Cash")}
+              onClick={() => {
+                setActiveMethod("Cash");
+                if (remainingAmount > 0) {
+                  processPartialPayment("Cash");
+                } else {
+                  processPayment("Cash");
+                }
+              }}
               className={`w-full p-2 ${
                 activeMethod === "Cash" ? "bg-green-600" : "bg-green-500 hover:bg-green-600"
               } rounded-md text-white text-sm font-bold`}
@@ -193,7 +206,14 @@ const PaymentScreen = ({ amount, isEmployee, onComplete, onClose }) => {
 
             {/* Card Button */}
             <button
-              onClick={() => remainingAmount > 0 ? processPartialPayment("Card") : processPayment("Card")}
+              onClick={() => {
+                setActiveMethod("Card");
+                if (remainingAmount > 0) {
+                  processPartialPayment("Card");
+                } else {
+                  processPayment("Card");
+                }
+              }}
               className={`w-full p-2 ${
                 activeMethod === "Card" ? "bg-blue-600" : "bg-blue-500 hover:bg-blue-600"
               } rounded-md text-white text-sm font-bold`}
