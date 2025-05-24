@@ -33,8 +33,8 @@ const PaymentScreen = ({ amount, isEmployee, onComplete, onClose }) => {
   };
 
   // Process a partial payment
-  const processPartialPayment = (method) => {
-    const enteredAmount = parseFloat(tenderedStr || '0');
+  const processPartialPayment = (method, amountParam) => {
+    const enteredAmount = amountParam !== undefined ? amountParam : parseFloat(tenderedStr || '0');
     
     if (enteredAmount <= 0) {
       alert("Please enter a valid amount");
@@ -72,9 +72,9 @@ const PaymentScreen = ({ amount, isEmployee, onComplete, onClose }) => {
   };
 
   // Final payment process (for single payment)
-  const processPayment = (method) => {
+  const processPayment = (method, amountParam) => {
     const exactAmount = parseFloat(amount.toFixed(2));
-    const enteredAmount = parseFloat(tenderedStr || '0');
+    const enteredAmount = amountParam !== undefined ? amountParam : parseFloat(tenderedStr || '0');
 
     if (isEmployee && enteredAmount.toFixed(2) !== exactAmount.toFixed(2)) {
       alert(`Employee must pay exactly £${exactAmount.toFixed(2)}`);
@@ -83,7 +83,7 @@ const PaymentScreen = ({ amount, isEmployee, onComplete, onClose }) => {
 
     if (enteredAmount < exactAmount) {
       // For non-employees, allow partial payment
-      processPartialPayment(method);
+      processPartialPayment(method, enteredAmount);
       return;
     }
 
@@ -204,21 +204,22 @@ const PaymentScreen = ({ amount, isEmployee, onComplete, onClose }) => {
               Cash
             </button>
 
-            {/* Card Button */}
-            <button
-              onClick={() => {
-                setActiveMethod("Card");
-                if (remainingAmount > 0) {
-                  processPartialPayment("Card");
-                } else {
-                  processPayment("Card");
-                }
-              }}
-              className={`w-full p-2 ${
-                activeMethod === "Card" ? "bg-blue-600" : "bg-blue-500 hover:bg-blue-600"
-              } rounded-md text-white text-sm font-bold`}
-            >
-              Card
+            {/* Card Button */}  
+            <button  
+              onClick={() => {  
+                setActiveMethod("Card");  
+                // setTenderedStr(remainingAmount.toFixed(2));  // no longer needed  
+                if (remainingAmount > 0) {  
+                  processPartialPayment("Card", remainingAmount);  
+                } else {  
+                  processPayment("Card", remainingAmount);  
+                }  
+              }}  
+              className={`w-full p-2 ${  
+                activeMethod === "Card" ? "bg-blue-600" : "bg-blue-500 hover:bg-blue-600"  
+              } rounded-md text-white text-sm font-bold`}  
+            >  
+              Card  
             </button>
           </div>
         </div>
