@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
-import { collection, getDocs, getDoc, doc, onSnapshot } from "firebase/firestore";
+import { collection, getDocs, getDoc, doc, onSnapshot,where,query } from "firebase/firestore";
 import { db } from "../firebase/config";
 
 export default function MenuGrid({ onAddItem = () => {} }) {
@@ -67,7 +67,7 @@ export default function MenuGrid({ onAddItem = () => {} }) {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const categorySnap = await getDocs(collection(db, "category"));
+        const categorySnap = await getDocs(query(collection(db, "category"),where("active","==",true)));
         const categoryData = categorySnap.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),

@@ -455,7 +455,7 @@ export default function ManagerScreen() {
   const fetchEmployees = async () => {
     try {
       const snapshot = await getDocs(
-        query(collection(db, "users_01"), where("role", "==", "employee"))
+        query(collection(db, "users_01"), where("role", "==", "teammember"))
       );
       const today = new Date();
       const monthDocId = `${today.getFullYear()}-${String(
