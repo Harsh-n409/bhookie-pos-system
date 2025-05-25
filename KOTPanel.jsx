@@ -339,14 +339,9 @@ export default function KOTPanel({ kotItems, setKotItems }) {
   };
 
   // Modify handlePayClick
-  const handlePayClick =async () => {
+  const handlePayClick = async () => {
     if (kotItems.length === 0) {
       alert("Please add items before payment");
-      return;
-    }
-
-    if (!orderType) {
-      alert("Please select order type (Dine In/Takeaway)");
       return;
     }
 
@@ -356,23 +351,16 @@ export default function KOTPanel({ kotItems, setKotItems }) {
       return;
     }
 
-    if (isEmployee) {
-      if (location.state?.selectedEmployee?.isClockedIn) {
-        alert("Employee must not be clocked in to use meal credits!");
-        return;
-      }
-
-      // ✅ Use existing cashDue and creditsUpdated from state
-      if (cashDue > 0) {
-        setIsPaymentModalOpen(true);
-        setPaymentMethod("Meal Credit + Cash");
-      } else {
-        setPaymentMethod("Meal Credit");
-        setIsPaymentProcessed(true);
-      }
+    // --- MODIFICATION START: handlePayClick logic refined ---
+    // If it's an employee and they can fully pay with credits (total is 0), skip customer modal and order type modal
+    if (isEmployee && total === 0) {
+      setPaymentMethod("Meal Credit");
+      setIsPaymentProcessed(true); // Directly process if no cash due
     } else {
+      // For all other cases (non-employee, or employee with cash due), open customer modal first
       setIsCustomerModalOpen(true);
     }
+    // --- MODIFICATION END: handlePayClick logic refined ---
   };
 
   const generateKOTId = async (dateObj) => {
@@ -512,7 +500,7 @@ export default function KOTPanel({ kotItems, setKotItems }) {
         })
       );
 
-      return finalResults;
+      setFoundCustomers(finalResults); // ✅ This should be the final state update
     } catch (error) {
       console.error("Search error:", error);
       return [];
@@ -639,19 +627,19 @@ export default function KOTPanel({ kotItems, setKotItems }) {
     }
   };
 
+  // --- MODIFICATION START: handleSelectCustomer logic refined ---
   const handleSelectCustomer = async (customer) => {
     if (customer.isEmployee) {
       setIsEmployee(true);
       setCustomerId(customer.EmployeeID);
-      const isClockedIn = await checkEmployeeClockInStatus(customer.employeeID);
+      const isClockedIn = await checkEmployeeClockInStatus(customer.EmployeeID); // Use EmployeeID for check
       if (isClockedIn) {
         alert("Clocked-in employees cannot use loyalty program!");
         return;
       }
 
-      // Fetch employee's meal credits
       try {
-        const mealRef = doc(db, "users_01", customer.phone, "meal", "1");
+        const mealRef = doc(db, "users_01", customer.phone, "meal", "1"); // Use customer.phone for doc ID
         const mealSnap = await getDoc(mealRef);
         const mealData = mealSnap.exists()
           ? mealSnap.data()
@@ -668,27 +656,17 @@ export default function KOTPanel({ kotItems, setKotItems }) {
       setIsEmployee(false);
     }
 
-    // Rest of the existing code...
-    setCustomerId(customer.customerID || customer.employeeID);
+    setCustomerId(customer.customerID || customer.EmployeeID); // Ensure correct ID is set
     setCustomerPhone(customer.phone);
     setCustomerName(customer.name);
     setCustomerPoints(customer.points || 0);
-    setIsCustomerModalOpen(false);
-    setIsOrderTypeModalOpen(true);
+    setIsNewCustomer(false); // This is an existing customer/employee
+    updateTotals(); // Recalculate totals after setting customer/employee info
 
-    if (customer.points > 0) {
-      const maxAllowedDiscount = Math.min(20, subTotal);
-      const actualDiscount = Math.min(customer.points, maxAllowedDiscount);
-      setDiscount(actualDiscount);
-      setTotal(subTotal - actualDiscount);
-    } else {
-      setDiscount(0);
-      setTotal(subTotal);
-    }
-
-    setIsCustomerModalOpen(false);
-    setIsOrderTypeModalOpen(true);
+    setIsCustomerModalOpen(false); // Close customer modal
+    setIsOrderTypeModalOpen(true); // Open order type modal next
   };
+  // --- MODIFICATION END: handleSelectCustomer logic refined ---
 
   const generateNineDigitUserId = async () => {
     const customersRef = collection(db, "customers");
@@ -705,6 +683,7 @@ export default function KOTPanel({ kotItems, setKotItems }) {
     return userId;
   };
 
+  // --- MODIFICATION START: createNewCustomer logic refined ---
   const createNewCustomer = async () => {
     if (!customerPhone || !customerName) {
       alert("Please enter phone number and name");
@@ -715,14 +694,14 @@ export default function KOTPanel({ kotItems, setKotItems }) {
       const newCustomerId = await generateCustomerId();
       const newUserId = String(
         Math.floor(100000000 + Math.random() * 900000000)
-      ); // Generate a 9-digit userId
+      );
 
       const customerData = {
         customerID: newCustomerId,
-        userId: newUserId, // Add the userId
+        userId: newUserId,
         name: customerName,
         phone: customerPhone,
-        points: 20,
+        points: 20, // Initial points for new customer
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       };
@@ -732,17 +711,17 @@ export default function KOTPanel({ kotItems, setKotItems }) {
       setCustomerId(newCustomerId);
       setCustomerPhone(customerPhone);
       setCustomerName(customerName);
-      setCustomerPoints(20);
-      setIsCustomerModalOpen(false);
-      setIsPaymentModalOpen(true);
-      setIsNewCustomer(false);
-      applyNewCustomerDiscount();
-	  setIsOrderTypeModalOpen(true);
+      setCustomerPoints(20); // Set points for the *new* customer
+      setIsNewCustomer(true); // Indicate this is a new customer
+      applyNewCustomerDiscount(); // Apply discount based on new customer points
+      setIsCustomerModalOpen(false); // Close customer modal
+      setIsOrderTypeModalOpen(true); // Open order type modal next
     } catch (error) {
       console.error("Error creating customer:", error);
       alert("Error creating customer");
     }
   };
+  // --- MODIFICATION END: createNewCustomer logic refined ---
 
   const handleGenerateKOT = async () => {
     let pointsToDeduct = 0;
@@ -937,12 +916,12 @@ export default function KOTPanel({ kotItems, setKotItems }) {
 
     <p><strong>Sub Total:</strong> £${subTotal.toFixed(2)}</p>
     <p><strong>Discount:</strong> £${
-      isEmployee ? creditsUsed.toFixed(2) : subTotal - total
+      isEmployee ? creditsUsed.toFixed(2) : (subTotal - total).toFixed(2)
     }</p>
     <p><strong>Total:</strong> £${total.toFixed(2)}</p>
 
     ${
-      customerPoints >= 2 && !isEmployee
+      customerId && !isEmployee && discount > 0
         ? `<p style="color: green;"> Discount applied: ${pointsToDeduct} (Remaining Points: ${updatedPoints})</p>`
         : ""
     }
@@ -1298,7 +1277,9 @@ export default function KOTPanel({ kotItems, setKotItems }) {
                   <button
                     onClick={() => {
                       createNewCustomer();
-                      setIsOrderTypeModalOpen(true);
+                      // --- MODIFICATION START: Removed redundant setIsOrderTypeModalOpen(true) here ---
+                      // setIsOrderTypeModalOpen(true); // This will be handled by createNewCustomer
+                      // --- MODIFICATION END ---
                     }}
                     className="px-4 py-2 bg-blue-600 text-white rounded"
                   >
@@ -1405,8 +1386,10 @@ export default function KOTPanel({ kotItems, setKotItems }) {
                 onClick={() => {
                   console.log("User selected: Dine-In");
                   setIsOrderTypeModalOpen(false);
-                  setIsCustomerModalOpen(false);
-                  setIsPaymentModalOpen(true);
+                  // --- MODIFICATION START: Simplified modal flow ---
+                  // Removed setIsCustomerModalOpen(false) as it should already be closed
+                  setIsPaymentModalOpen(true); // Only open payment modal next
+                  // --- MODIFICATION END ---
                   setOrderType("dine-in");
                 }}
                 className="px-4 py-2 bg-green-600 text-white rounded"
@@ -1417,8 +1400,10 @@ export default function KOTPanel({ kotItems, setKotItems }) {
                 onClick={() => {
                   console.log("User selected: Takeaway");
                   setIsOrderTypeModalOpen(false);
-                  setIsCustomerModalOpen(false);
-                  setIsPaymentModalOpen(true);
+                  // --- MODIFICATION START: Simplified modal flow ---
+                  // Removed setIsCustomerModalOpen(false) as it should already be closed
+                  setIsPaymentModalOpen(true); // Only open payment modal next
+                  // --- MODIFICATION END ---
                   setOrderType("takeaway");
                 }}
                 className="px-4 py-2 bg-blue-600 text-white rounded"
