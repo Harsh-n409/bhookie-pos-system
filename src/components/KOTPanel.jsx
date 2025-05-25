@@ -722,21 +722,21 @@ const prefix = `${String(dateObj.getFullYear()).slice(-2)}${String(
         userId: newUserId, // Add the userId
         name: customerName,
         phone: customerPhone,
-        points: 20,
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      };
+      points: 0,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    };
 
-      await setDoc(doc(db, "customers", customerPhone), customerData);
+    await setDoc(doc(db, "customers", customerPhone), customerData);
 
-      setCustomerId(newCustomerId);
-      setCustomerPhone(customerPhone);
-      setCustomerName(customerName);
-      setCustomerPoints(20);
-      setIsCustomerModalOpen(false);
-      setIsPaymentModalOpen(true);
-      setIsNewCustomer(false);
-      applyNewCustomerDiscount();
+    setCustomerId(newCustomerId);
+    setCustomerPhone(customerPhone);
+    setCustomerName(customerName);
+    setCustomerPoints(0);
+    setIsCustomerModalOpen(false);
+    setIsPaymentModalOpen(true);
+    setIsNewCustomer(false);
+    applyNewCustomerDiscount();
     } catch (error) {
       console.error("Error creating customer:", error);
       alert("Error creating customer");
