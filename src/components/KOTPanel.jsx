@@ -685,12 +685,37 @@ const prefix = `${String(dateObj.getFullYear()).slice(-2)}${String(
 
   // --- MODIFICATION START: createNewCustomer logic refined ---
   const createNewCustomer = async () => {
-    if (!customerPhone || !customerName) {
+    if(!customerPhone && !customerName){
       alert("Please enter phone number and name");
+      return;
+    }else if(!customerPhone){
+      alert("Please enter phone number");
+      return;
+    }else if(!customerName){
+      alert("Please enter name");
       return;
     }
 
-    try {
+  const phoneRegex = /^\d{10}$/;
+  if(!phoneRegex.test(customerPhone)){
+    alert("Phone number must be of 10 digits");
+    return;
+  }
+
+  const nameRegex=/^[a-zA-Z\s\-]+$/;
+  if(!nameRegex.test(customerName)){
+    alert("Name should contain only alphabets and may include spaces or hyphens");
+    return;
+  }
+  
+
+   try {
+      const existingDoc =
+       await getDoc(doc(db,"customers",customerPhone));
+      if(existingDoc.exists()){
+        alert("Phone number already exists , please enter a new number.");
+        return;
+      }
       const newCustomerId = await generateCustomerId();
       const newUserId = String(
         Math.floor(100000000 + Math.random() * 900000000)
@@ -721,7 +746,7 @@ const prefix = `${String(dateObj.getFullYear()).slice(-2)}${String(
       alert("Error creating customer");
     }
   };
-  // --- MODIFICATION END: createNewCustomer logic refined ---
+     // --- MODIFICATION END: createNewCustomer logic refined ---
 
   const handleGenerateKOT = async () => {
     let pointsToDeduct = 0;
@@ -1254,18 +1279,28 @@ const prefix = `${String(dateObj.getFullYear()).slice(-2)}${String(
               // New Customer Creation Form
               <>
                 <h3 className="text-xl font-bold mb-4">Add New Customer</h3>
+               Enter Name
                 <input
                   className="border p-2 mb-2 w-full"
                   placeholder="Customer Name"
                   value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
+                  onChange={(e) => {
+                    const cleaned = e.target.value.replace(/[^a-zA-Z\s\-]/g,"");
+                    setCustomerName(cleaned);
+                  }}
                 />
+                Enter Phone Number
                 <input
                   className="border p-2 mb-4 w-full"
                   placeholder="Phone Number"
                   value={customerPhone}
                   maxLength={10}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  onChange={(e) => {
+                    const cleaned = e.target.value.replace(/\D/g,"");
+                    if(cleaned.length <= 10){
+                      setCustomerPhone(cleaned);
+                    }
+                  }}
                 />
                 <div className="flex justify-end gap-2">
                   <button
