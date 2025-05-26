@@ -396,6 +396,23 @@ export default function KOTPanel({
       return;
     }
 
+    try {
+      const cashierQuery = query(
+        collection(db, "cashierAttendance"),
+        where("isSignedIn", "==", true),
+        where("isOpen", "==", true)
+      );
+      const cashierSnapshot = await getDocs(cashierQuery);
+      if (cashierSnapshot.empty) {
+        alert("No active cashier. Please open a cashier first.");
+        return;
+      }
+    } catch (error) {
+      console.error("Cashier check error:", error);
+      alert("Error verifying cashier status");
+      return;
+    }
+
     const stockErrors = await checkStockAvailability(kotItems);
     if (stockErrors.length > 0) {
       alert(`Cannot process payment:\n${stockErrors.join("\n")}`);
@@ -736,34 +753,34 @@ export default function KOTPanel({
 
   // --- MODIFICATION START: createNewCustomer logic refined ---
   const createNewCustomer = async () => {
-    if(!customerPhone && !customerName){
+    if (!customerPhone && !customerName) {
       alert("Please enter phone number and name");
       return;
-    }else if(!customerPhone){
+    } else if (!customerPhone) {
       alert("Please enter phone number");
       return;
-    }else if(!customerName){
+    } else if (!customerName) {
       alert("Please enter name");
       return;
     }
 
-  const phoneRegex = /^\d{10}$/;
-  if(!phoneRegex.test(customerPhone)){
-    alert("Phone number must be of 10 digits");
-    return;
-  }
+    const phoneRegex = /^\d{10}$/;
+    if (!phoneRegex.test(customerPhone)) {
+      alert("Phone number must be of 10 digits");
+      return;
+    }
 
-  const nameRegex=/^[a-zA-Z\s\-]+$/;
-  if(!nameRegex.test(customerName)){
-    alert("Name should contain only alphabets and may include spaces or hyphens");
-    return;
-  }
-  
+    const nameRegex = /^[a-zA-Z\s\-]+$/;
+    if (!nameRegex.test(customerName)) {
+      alert(
+        "Name should contain only alphabets and may include spaces or hyphens"
+      );
+      return;
+    }
 
-   try {
-      const existingDoc =
-       await getDoc(doc(db,"customers",customerPhone));
-      if(existingDoc.exists()){
+    try {
+      const existingDoc = await getDoc(doc(db, "customers", customerPhone));
+      if (existingDoc.exists()) {
         alert("Phone number already exists , please enter a new number.");
         return;
       }
@@ -777,27 +794,27 @@ export default function KOTPanel({
         userId: newUserId,
         name: customerName,
         phone: customerPhone,
-      points: 0,
-      createdAt: Timestamp.now(),
-      updatedAt: Timestamp.now(),
-    };
+        points: 0,
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      };
 
-    await setDoc(doc(db, "customers", customerPhone), customerData);
+      await setDoc(doc(db, "customers", customerPhone), customerData);
 
-    setCustomerId(newCustomerId);
-    setCustomerPhone(customerPhone);
-    setCustomerName(customerName);
-    setCustomerPoints(0);
-    setIsCustomerModalOpen(false);
-    setIsPaymentModalOpen(true);
-    setIsNewCustomer(false);
-    applyNewCustomerDiscount();
+      setCustomerId(newCustomerId);
+      setCustomerPhone(customerPhone);
+      setCustomerName(customerName);
+      setCustomerPoints(0);
+      setIsCustomerModalOpen(false);
+      setIsPaymentModalOpen(true);
+      setIsNewCustomer(false);
+      applyNewCustomerDiscount();
     } catch (error) {
       console.error("Error creating customer:", error);
       alert("Error creating customer");
     }
   };
-     // --- MODIFICATION END: createNewCustomer logic refined ---
+  // --- MODIFICATION END: createNewCustomer logic refined ---
 
   const handleGenerateKOT = async () => {
     let pointsToDeduct = 0;
@@ -808,6 +825,18 @@ export default function KOTPanel({
     }
 
     try {
+      const cashierQuery = query(
+        collection(db, "cashierAttendance"),
+        where("isSignedIn", "==", true),
+        where("isOpen", "==", true)
+      );
+      const cashierSnapshot = await getDocs(cashierQuery);
+      if (cashierSnapshot.empty) {
+        alert("No active cashier. Please open a cashier first.");
+        return;
+      }
+      const activeCashier = cashierSnapshot.docs[0].data();
+      const { cashierId, cashierName } = activeCashier;
       const stockErrors = await checkStockAvailability(kotItems);
 
       if (stockErrors.length > 0) {
@@ -833,6 +862,8 @@ export default function KOTPanel({
       const data = {
         kot_id: newKOTId,
         date: kotTimestamp,
+        cashierId,
+        cashierName,
         amount: total.toFixed(3),
         customerID: customerId || null,
         creditsUsed: isEmployee ? creditsUsed : 0,
@@ -929,6 +960,7 @@ export default function KOTPanel({
     <h3 style="text-align: center; margin: 0; padding: 5px 0;">KOT</h3>
 
     <p><strong>KOT ID:</strong> ${newKOTId}</p>
+    <p><strong>Cashier:</strong> ${cashierName} (${cashierId})</p>
     <p><strong>Order Type:</strong> ${
       orderType === "dine-in" ? "Dine In" : "Takeaway"
     }</p>
@@ -1346,13 +1378,16 @@ export default function KOTPanel({
               // New Customer Creation Form
               <>
                 <h3 className="text-xl font-bold mb-4">Add New Customer</h3>
-               Enter Name
+                Enter Name
                 <input
                   className="border p-2 mb-2 w-full"
                   placeholder="Customer Name"
                   value={customerName}
                   onChange={(e) => {
-                    const cleaned = e.target.value.replace(/[^a-zA-Z\s\-]/g,"");
+                    const cleaned = e.target.value.replace(
+                      /[^a-zA-Z\s\-]/g,
+                      ""
+                    );
                     setCustomerName(cleaned);
                   }}
                 />
@@ -1363,8 +1398,8 @@ export default function KOTPanel({
                   value={customerPhone}
                   maxLength={10}
                   onChange={(e) => {
-                    const cleaned = e.target.value.replace(/\D/g,"");
-                    if(cleaned.length <= 10){
+                    const cleaned = e.target.value.replace(/\D/g, "");
+                    if (cleaned.length <= 10) {
                       setCustomerPhone(cleaned);
                     }
                   }}

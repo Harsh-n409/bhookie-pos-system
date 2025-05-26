@@ -987,6 +987,7 @@ const ReportPage = () => {
                 <th>Order Type</th>
                 <th>Payment Method</th>
                 <th>Cashier</th>
+                <th>User</th>
                 <th>Time</th>
               </tr>
             </thead>
@@ -1010,7 +1011,8 @@ const ReportPage = () => {
                     </td>
                     <td>{kot.orderType || "Unknown"}</td>
                     <td>{kot.methodOfPayment || "Unknown"}</td>
-                    <td>{kot.userId || "Unknown"}</td>
+                    <td>{kot.cashierName|| "Unknown"}</td>
+                    <td>{kot.customerID}</td>
                     <td>{format(kot.date, "HH:mm:ss")}</td>
                   </tr>
                 ))
