@@ -736,12 +736,37 @@ export default function KOTPanel({
 
   // --- MODIFICATION START: createNewCustomer logic refined ---
   const createNewCustomer = async () => {
-    if (!customerPhone || !customerName) {
+    if(!customerPhone && !customerName){
       alert("Please enter phone number and name");
+      return;
+    }else if(!customerPhone){
+      alert("Please enter phone number");
+      return;
+    }else if(!customerName){
+      alert("Please enter name");
       return;
     }
 
-    try {
+  const phoneRegex = /^\d{10}$/;
+  if(!phoneRegex.test(customerPhone)){
+    alert("Phone number must be of 10 digits");
+    return;
+  }
+
+  const nameRegex=/^[a-zA-Z\s\-]+$/;
+  if(!nameRegex.test(customerName)){
+    alert("Name should contain only alphabets and may include spaces or hyphens");
+    return;
+  }
+  
+
+   try {
+      const existingDoc =
+       await getDoc(doc(db,"customers",customerPhone));
+      if(existingDoc.exists()){
+        alert("Phone number already exists , please enter a new number.");
+        return;
+      }
       const newCustomerId = await generateCustomerId();
       const newUserId = String(
         Math.floor(100000000 + Math.random() * 900000000)
@@ -752,27 +777,27 @@ export default function KOTPanel({
         userId: newUserId,
         name: customerName,
         phone: customerPhone,
-        points: 20, // Initial points for new customer
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      };
+      points: 0,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    };
 
-      await setDoc(doc(db, "customers", customerPhone), customerData);
+    await setDoc(doc(db, "customers", customerPhone), customerData);
 
-      setCustomerId(newCustomerId);
-      setCustomerPhone(customerPhone);
-      setCustomerName(customerName);
-      setCustomerPoints(20); // Set points for the *new* customer
-      setIsNewCustomer(true); // Indicate this is a new customer
-      applyNewCustomerDiscount(); // Apply discount based on new customer points
-      setIsCustomerModalOpen(false); // Close customer modal
-      setIsOrderTypeModalOpen(true); // Open order type modal next
+    setCustomerId(newCustomerId);
+    setCustomerPhone(customerPhone);
+    setCustomerName(customerName);
+    setCustomerPoints(0);
+    setIsCustomerModalOpen(false);
+    setIsPaymentModalOpen(true);
+    setIsNewCustomer(false);
+    applyNewCustomerDiscount();
     } catch (error) {
       console.error("Error creating customer:", error);
       alert("Error creating customer");
     }
   };
-  // --- MODIFICATION END: createNewCustomer logic refined ---
+     // --- MODIFICATION END: createNewCustomer logic refined ---
 
   const handleGenerateKOT = async () => {
     let pointsToDeduct = 0;
@@ -1321,18 +1346,28 @@ export default function KOTPanel({
               // New Customer Creation Form
               <>
                 <h3 className="text-xl font-bold mb-4">Add New Customer</h3>
+               Enter Name
                 <input
                   className="border p-2 mb-2 w-full"
                   placeholder="Customer Name"
                   value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
+                  onChange={(e) => {
+                    const cleaned = e.target.value.replace(/[^a-zA-Z\s\-]/g,"");
+                    setCustomerName(cleaned);
+                  }}
                 />
+                Enter Phone Number
                 <input
                   className="border p-2 mb-4 w-full"
                   placeholder="Phone Number"
                   value={customerPhone}
                   maxLength={10}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  onChange={(e) => {
+                    const cleaned = e.target.value.replace(/\D/g,"");
+                    if(cleaned.length <= 10){
+                      setCustomerPhone(cleaned);
+                    }
+                  }}
                 />
                 <div className="flex justify-end gap-2">
                   <button
