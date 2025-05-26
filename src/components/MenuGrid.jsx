@@ -1,8 +1,20 @@
 import { useEffect, useState, useMemo } from "react";
-import { collection, getDocs, getDoc, doc, onSnapshot,where,query } from "firebase/firestore";
+import {
+  collection,
+  getDocs,
+  getDoc,
+  doc,
+  onSnapshot,
+  where,
+  query,
+} from "firebase/firestore";
 import { db } from "../firebase/config";
 
-export default function MenuGrid({ onAddItem = () => {} }) {
+export default function MenuGrid({
+  onAddItem = () => {},
+  onApplyOffer = () => {},
+  appliedOffers
+}) {
   const [categories, setCategories] = useState([]);
   const [items, setItems] = useState([]);
   const [inventory, setInventory] = useState({});
@@ -12,6 +24,7 @@ export default function MenuGrid({ onAddItem = () => {} }) {
   const [showSaucePopup, setShowSaucePopup] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [showOffers, setShowOffers] = useState(true);
+  const [offers, setOffers] = useState([]);
 
   // Clickable items - lowercased for comparison
   const clickableItems = [
@@ -21,69 +34,110 @@ export default function MenuGrid({ onAddItem = () => {} }) {
     "bhaji pav",
     "veggie aloo tikki burger",
     "chai",
-    "chicken spicy burger + chicken drumstick"
+    "chicken spicy burger + chicken drumstick",
   ];
 
   // Sample offers data
-  const offers = [
-    {
-      id: "offer1",
-      title: "COMBO DEAL",
-      description: "Chicken Spicy Burger + Drumstick",
-      price: "£7.99",
-      originalPrice: "£9.50",
-      items: ["chicken spicy burger", "chicken drumsticks"],
-      color: "bg-gradient-to-r from-red-600 to-orange-500"
-    },
-    {
-      id: "offer2",
-      title: "VEGGIE SPECIAL",
-      description: "Vada Pav + Bhaji Pav",
-      price: "£6.50",
-      originalPrice: "£8.00",
-      items: ["vada pav", "bhaji pav"],
-      color: "bg-gradient-to-r from-green-600 to-emerald-500"
-    },
-    {
-      id: "offer3",
-      title: "SNACKS COMBO",
-      description: "Chicken Bites + Manchurian Bites",
-      price: "£5.99",
-      originalPrice: "£7.50",
-      items: ["chicken bites", "manchurian bites"],
-      color: "bg-gradient-to-r from-purple-600 to-indigo-500"
-    },
-    {
-      id: "offer4",
-      title: "QUICK MEAL",
-      description: "Veggie Burger + Chai",
-      price: "£4.99",
-      originalPrice: "£6.50",
-      items: ["vada pav", "chai"],
-      color: "bg-gradient-to-r from-blue-600 to-cyan-500"
-    }
-  ];
+  // const offers = [
+  //   {
+  //     id: "offer1",
+  //     title: "COMBO DEAL",
+  //     description: "Chicken Spicy Burger + Drumstick",
+  //     price: "£7.99",
+  //     originalPrice: "£9.50",
+  //     items: ["chicken spicy burger", "chicken drumsticks"],
+  //     color: "bg-gradient-to-r from-red-600 to-orange-500"
+  //   },
+  //   {
+  //     id: "offer2",
+  //     title: "VEGGIE SPECIAL",
+  //     description: "Vada Pav + Bhaji Pav",
+  //     price: "£6.50",
+  //     originalPrice: "£8.00",
+  //     items: ["vada pav", "bhaji pav"],
+  //     color: "bg-gradient-to-r from-green-600 to-emerald-500"
+  //   },
+  //   {
+  //     id: "offer3",
+  //     title: "SNACKS COMBO",
+  //     description: "Chicken Bites + Manchurian Bites",
+  //     price: "£5.99",
+  //     originalPrice: "£7.50",
+  //     items: ["chicken bites", "manchurian bites"],
+  //     color: "bg-gradient-to-r from-purple-600 to-indigo-500"
+  //   },
+  //   {
+  //     id: "offer4",
+  //     title: "QUICK MEAL",
+  //     description: "Veggie Burger + Chai",
+  //     price: "£4.99",
+  //     originalPrice: "£6.50",
+  //     items: ["vada pav", "chai"],
+  //     color: "bg-gradient-to-r from-blue-600 to-cyan-500"
+  //   }
+  // ];
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const categorySnap = await getDocs(query(collection(db, "category"),where("active","==",true)));
+        const categorySnap = await getDocs(
+          query(collection(db, "category"), where("active", "==", true))
+        );
         const categoryData = categorySnap.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
         }));
         setCategories(categoryData);
 
-        const itemsSnap = await getDocs(collection(db, "items"));
+        const offersSnap = await getDocs(
+          query(collection(db, "Offers"), where("active", "==", true))
+        );
+
+        const offersData = await Promise.all(
+          offersSnap.docs.map(async (offerDoc) => {
+            const data = offerDoc.data();
+            const items = await Promise.all(
+              data.items.map(async (itemRef) => {
+                // Handle string paths or references
+                if (typeof itemRef === "string") {
+                  const [collectionName, itemId] = itemRef.split("/");
+                  const correctedCollection = collectionName.toLowerCase();
+                  const itemDocRef = doc(db, correctedCollection, itemId);
+                  const itemSnap = await getDoc(itemDocRef);
+                  return itemSnap.exists()
+                    ? { id: itemSnap.id, ...itemSnap.data() }
+                    : null;
+                } else {
+                  const itemSnap = await getDoc(itemRef);
+                  return itemSnap.exists()
+                    ? { id: itemSnap.id, ...itemSnap.data() }
+                    : null;
+                }
+              })
+            );
+            return {
+              id: offerDoc.id,
+              ...data,
+              items: items.filter(Boolean),
+              originalPrice: items.reduce(
+                (sum, item) => sum + (item?.price || 0),
+                0
+              ),
+            };
+          })
+        );
+        setOffers(offersData.filter((offer) => offer.items.length > 0));
+
+        const itemsSnap = await getDocs(
+          query(collection(db, "items"), where("active", "==", true))
+        );
         const itemData = itemsSnap.docs.map((doc) => {
           const data = doc.data();
           return {
             id: doc.id,
             ...data,
             categoryId:
-              data.categoryId?.id ||
-              data.categoryId?.split("/").pop() ||
-              null,
+              data.categoryId?.id || data.categoryId?.split("/").pop() || null,
           };
         });
         setItems(itemData);
@@ -92,9 +146,9 @@ export default function MenuGrid({ onAddItem = () => {} }) {
         itemData.forEach((item) => {
           const inventoryRef = doc(db, "inventory", item.id);
           const unsubscribe = onSnapshot(inventoryRef, (doc) => {
-            setInventory(prev => ({
+            setInventory((prev) => ({
               ...prev,
-              [item.id]: doc.exists() ? doc.data() : { totalStockOnHand: 9999 }
+              [item.id]: doc.exists() ? doc.data() : { totalStockOnHand: 9999 },
             }));
           });
 
@@ -130,7 +184,7 @@ export default function MenuGrid({ onAddItem = () => {} }) {
         id: item.id,
         name: item.itemName,
         price: item.price,
-        quantity: 1
+        quantity: 1,
       });
     } catch (err) {
       console.error("Error fetching sauces:", err);
@@ -138,7 +192,7 @@ export default function MenuGrid({ onAddItem = () => {} }) {
         id: item.id,
         name: item.itemName,
         price: item.price,
-        quantity: 1
+        quantity: 1,
       });
     }
   };
@@ -150,26 +204,54 @@ export default function MenuGrid({ onAddItem = () => {} }) {
         name: selectedItem.itemName,
         price: selectedItem.price,
         sauces: sauce ? [sauce] : [],
-        quantity: 1
+        quantity: 1,
       });
     }
     setShowSaucePopup(false);
     setSelectedItem(null);
   };
 
-  const handleAddOffer = (offer) => {
-    offer.items.forEach(itemName => {
-      const item = items.find(i => i.itemName.toLowerCase() === itemName.toLowerCase());
-      if (item) {
-        onAddItem({
-          id: item.id,
-          name: item.itemName,
-          price: item.price,
-          quantity: 1
-        });
-      }
+  const handleAddOffer = async (offer) => {
+  try {
+    // Check if offer is already applied
+    if (appliedOffers.some(o => o.id === offer.id)) {
+      alert("This offer is already applied!");
+      return;
+    }
+
+    // Get fresh offer data
+    const offerSnap = await getDoc(doc(db, "Offers", offer.id));
+    const offerData = offerSnap.data();
+
+    // Calculate discount
+    const originalTotal = offer.items.reduce(
+      (sum, item) => sum + item.price,
+      0
+    );
+    const discount = originalTotal - offerData.offerPrice;
+
+    // Apply offer
+    onApplyOffer(discount, {
+      id: offer.id,
+      name: offerData.title,
+      discountAmount: discount,
+      items: offer.items.map(i => i.id)
     });
-  };
+
+    // Add items with offer association
+    offer.items.forEach((item) => {
+      onAddItem({
+        id: item.id,
+        name: item.itemName,
+        price: item.price,
+        quantity: 1,
+        associatedOffer: offer.id
+      });
+    });
+  } catch (error) {
+    console.error("Error applying offer:", error);
+  }
+};
 
   const handleCategoryClick = (categoryId) => {
     setSelectedCategoryId(categoryId);
@@ -219,78 +301,102 @@ export default function MenuGrid({ onAddItem = () => {} }) {
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-2">
             {filteredItems.map((item) => {
               const stock = inventory[item.id]?.totalStockOnHand;
-              const isClickable = clickableItems.includes(item.itemName.toLowerCase()) && (stock === undefined || stock > 0);
+              const isClickable =
+                clickableItems.includes(item.itemName.toLowerCase()) &&
+                (stock === undefined || stock > 0);
 
               return (
                 <button
                   key={item.id}
-                  onClick={isClickable ? () => handleItemClick(item) : undefined}
+                  onClick={
+                    isClickable ? () => handleItemClick(item) : undefined
+                  }
                   disabled={!isClickable}
                   className={`rounded p-1 shadow-md text-white text-center flex flex-col justify-center items-center transition ${
                     isClickable ? "" : "opacity-50 cursor-not-allowed"
                   }`}
                   style={{
-                    backgroundColor:
-                      item.itemName.toLowerCase().includes("chicken")
-                        ? "#e60000"
-                        : item.itemName.toLowerCase().includes("paneer")
-                        ? "#1f3b73"
-                        : "#22594c",
+                    backgroundColor: item.itemName
+                      .toLowerCase()
+                      .includes("chicken")
+                      ? "#e60000"
+                      : item.itemName.toLowerCase().includes("paneer")
+                      ? "#1f3b73"
+                      : "#22594c",
                   }}
                 >
                   <div>{item.itemName.toUpperCase()}</div>
                   <div className="text-xl mt-3">£{item.price}</div>
                   {stock !== undefined && stock <= 0 && (
-                    <div className="text-xs text-white-500 mt-1">Out of stock</div>
+                    <div className="text-xs text-white-500 mt-1">
+                      Out of stock
+                    </div>
                   )}
                   {stock !== undefined && stock > 0 && stock < 10 && (
-                    <div className="text-xs text-white-600 mt-1">Low stock: {stock} left</div>
+                    <div className="text-xs text-white-600 mt-1">
+                      Low stock: {stock} left
+                    </div>
                   )}
                 </button>
               );
             })}
           </div>
-        ) : showOffers ? (
-          <div className="h-full">
-            <h2 className="text-3xl font-bold mb-6 text-purple-900 text-center">TODAY'S SPECIAL OFFERS</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {offers.map((offer) => (
-                <div
-                  key={offer.id}
-                  className={`${offer.color} rounded-xl shadow-xl overflow-hidden text-white transform hover:scale-105 transition duration-300`}
-                >
-                  <div className="p-6">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="text-2xl font-bold mb-2">{offer.title}</h3>
-                        <p className="text-lg mb-4">{offer.description}</p>
+        ) : (
+          showOffers && (
+            <div className="h-full">
+              <h2 className="text-3xl font-bold mb-6 text-purple-900 text-center">
+                TODAY'S SPECIAL OFFERS
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {offers.map((offer) => (
+                  <div
+                    key={offer.id}
+                    className={`${offer.color} rounded-xl shadow-xl overflow-hidden text-white transform hover:scale-105 transition duration-300`}
+                  >
+                    <div className="p-6">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="text-2xl font-bold mb-2">
+                            {offer.title}
+                          </h3>
+                          <p className="text-lg mb-4">
+                            {offer.items
+                              .map((item) => item.itemName)
+                              .join(" + ")}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-3xl font-bold">
+                            £{offer.offerPrice}
+                          </span>
+                          <span className="block text-sm line-through opacity-80">
+                            £{offer.originalPrice.toFixed(2)}
+                          </span>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <span className="text-3xl font-bold">{offer.price}</span>
-                        <span className="block text-sm line-through opacity-80">{offer.originalPrice}</span>
+                      <div className="flex justify-between items-center mt-4">
+                        <span className="text-sm bg-white bg-opacity-20 px-3 py-1 rounded-full">
+                          SAVE{" "}
+                          {Math.round(
+                            ((offer.originalPrice - offer.offerPrice) /
+                              offer.originalPrice) *
+                              100
+                          )}
+                          %
+                        </span>
+                        <button
+                          onClick={() => handleAddOffer(offer)}
+                          className="bg-white text-purple-800 px-4 py-2 rounded-lg font-bold hover:bg-purple-100 transition"
+                        >
+                          ADD TO ORDER
+                        </button>
                       </div>
-                    </div>
-                    <div className="flex justify-between items-center mt-4">
-                      <span className="text-sm bg-white bg-opacity-20 px-3 py-1 rounded-full">SAVE {Math.round((parseFloat(offer.originalPrice.substring(1)) - parseFloat(offer.price.substring(1))) * 100 / parseFloat(offer.originalPrice.substring(1)))}%</span>
-                      <button
-                        onClick={() => handleAddOffer(offer)}
-                        className="bg-white text-purple-800 px-4 py-2 rounded-lg font-bold hover:bg-purple-100 transition"
-                      >
-                        ADD TO ORDER
-                      </button>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-            <div className="mt-8 text-center">
-              <p className="text-purple-900 text-lg">Select a category from the left menu to view all items</p>
-            </div>
-          </div>
-        ) : (
-          <div className="text-gray-800 font-medium text-lg">
-            Select a category to view items
-          </div>
+          )
         )}
       </div>
 

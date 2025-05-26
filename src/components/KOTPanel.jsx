@@ -20,7 +20,13 @@ import {
   runTransaction,
 } from "firebase/firestore";
 
-export default function KOTPanel({ kotItems, setKotItems }) {
+export default function KOTPanel({
+  kotItems,
+  setKotItems,
+  totalDiscount,
+  appliedOffers,
+  onRemoveOffer,
+}) {
   const [subTotal, setSubTotal] = useState(0);
   const [discount, setDiscount] = useState(0);
   const [total, setTotal] = useState(0);
@@ -64,11 +70,36 @@ export default function KOTPanel({ kotItems, setKotItems }) {
     }
   }, [isPaymentProcessed]);
 
+  // Add this useEffect in KOTPanel component
+  useEffect(() => {
+    // Validate existing offers when items change
+    const validateOffers = () => {
+      appliedOffers.forEach((offer) => {
+        const allOfferItemsPresent = offer.items.every((itemId) =>
+          kotItems.some((item) => item.id === itemId)
+        );
+
+        if (!allOfferItemsPresent) {
+          // Remove invalid offer
+          onRemoveOffer(offer.id);
+        }
+      });
+    };
+
+    validateOffers();
+  }, [kotItems, appliedOffers, onRemoveOffer]);
+
   useEffect(() => {
     if (kotItems.length > 0) {
       updateTotals(kotItems);
     }
-  }, [kotItems, isEmployee, employeeMealCredits]);
+  }, [
+    kotItems,
+    isEmployee,
+    employeeMealCredits,
+    totalDiscount,
+    customerPoints,
+  ]);
 
   const allowedItems = [
     "Chicken bites",
@@ -238,35 +269,38 @@ export default function KOTPanel({ kotItems, setKotItems }) {
     );
     setSubTotal(parseFloat(subtotal));
 
-    let newDiscount = 0;
+    // Calculate available discount capacity
+    const discountableAmount = subtotal - totalDiscount;
+
+    let loyaltyDiscount = 0;
     let credits = 0;
 
     if (isEmployee) {
-      // Calculate maximum credits usable for employees
-      credits = Math.min(employeeMealCredits, subtotal);
-      newDiscount = credits;
+      credits = Math.min(employeeMealCredits, discountableAmount);
+      loyaltyDiscount = credits;
     } else if (customerId) {
-      // Existing customer discount logic
-      // STRICTLY limit to maximum 20 points
-      const maxAllowedDiscount = Math.min(20, subtotal);
-      newDiscount = Math.min(customerPoints, maxAllowedDiscount);
+      // Use fresh customerPoints value
+      const availablePoints = customerPoints;
+      const maxAllowed = Math.min(20, discountableAmount);
+      loyaltyDiscount = Math.min(availablePoints, maxAllowed);
     }
 
-    setDiscount(newDiscount);
-    const calculatedTotal = subtotal - newDiscount;
+    const combinedDiscount = totalDiscount + loyaltyDiscount;
+    const calculatedTotal = subtotal - combinedDiscount;
+
+    setDiscount(combinedDiscount);
     setTotal(parseFloat(calculatedTotal));
-    // ✅ Earned points calculated from fresh total
-    let earned = 0;
-    if (customerId && !isEmployee) {
-      earned = Math.floor(calculatedTotal * 0.1);
-    }
-    setEarnedPoints(earned);
-    // Update creditsUsed and cashDue for employees
+
+    // Update employee-specific states
     if (isEmployee) {
       setCreditsUsed(credits);
-      console.log("updated cashdue");
       setCashDue(calculatedTotal);
     }
+
+    // Update earned points
+    const earned =
+      customerId && !isEmployee ? Math.floor(calculatedTotal * 0.1) : 0;
+    setEarnedPoints(earned);
   };
   // discount function for new customers
   const applyNewCustomerDiscount = () => {
@@ -307,11 +341,28 @@ export default function KOTPanel({ kotItems, setKotItems }) {
   };
 
   const handleRemoveItem = (index) => {
-    const updated = kotItems.filter((_, i) => i !== index);
-    setKotItems(updated);
-    updateTotals(updated);
-  };
+    const item = kotItems[index];
+    const updatedItems = [...kotItems];
+    updatedItems.splice(index, 1);
 
+    // Check if removed item was part of an offer
+    if (item.associatedOffer) {
+      const offer = appliedOffers.find((o) => o.id === item.associatedOffer);
+      if (offer) {
+        // Check if any offer items remain
+        const remainingOfferItems = updatedItems.filter(
+          (i) => i.associatedOffer === item.associatedOffer
+        );
+
+        if (remainingOfferItems.length === 0) {
+          onRemoveOffer(item.associatedOffer);
+        }
+      }
+    }
+
+    setKotItems(updatedItems);
+    updateTotals(updatedItems);
+  };
   // Update the clearItems function to reset employee-related states
   const clearItems = () => {
     setKotItems([]);
@@ -383,7 +434,7 @@ export default function KOTPanel({ kotItems, setKotItems }) {
     const number = snapshot.size + 1;
 
     // Generate prefix: DDMMYY
-const prefix = `${String(dateObj.getFullYear()).slice(-2)}${String(
+    const prefix = `${String(dateObj.getFullYear()).slice(-2)}${String(
       dateObj.getMonth() + 1
     ).padStart(2, "0")}${String(dateObj.getDate()).padStart(2, "0")}`;
 
@@ -1110,6 +1161,22 @@ const prefix = `${String(dateObj.getFullYear()).slice(-2)}${String(
         <div>
           <p>Sub Total: £{subTotal.toFixed(2)}</p>
           <p>Discount: £{discount.toFixed(2)}</p>
+          {appliedOffers.map((offer) => (
+            <div key={offer.id} className="flex justify-between text-red-600">
+              <span>{offer.name} Discount:</span>
+              <span>-£{offer.discountAmount.toFixed(2)}</span>
+            </div>
+          ))}
+
+          {/* Loyalty/Employee Discount */}
+          {discount - totalDiscount > 0 && (
+            <div className="flex justify-between text-blue-600">
+              <span>
+                {isEmployee ? "Meal Credits" : "Loyalty Points"} Discount:
+              </span>
+              <span>-£{(discount - totalDiscount).toFixed(2)}</span>
+            </div>
+          )}
           <p className="font-bold text-lg">Total: £{total.toFixed(2)}</p>
         </div>
       </div>
