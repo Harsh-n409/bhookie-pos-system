@@ -1027,12 +1027,8 @@ const ReportPage = () => {
                     </td>
                     <td>{kot.orderType || "Unknown"}</td>
                     <td>{kot.methodOfPayment || "Unknown"}</td>
-<<<<<<< HEAD
                     <td>{kot.cashierName|| "Unknown"}</td>
                     <td>{kot.customerID}</td>
-=======
-                    <td>{getUserName(kot.userId)}</td> {/* Changed to display user name */}
->>>>>>> c8cb92abd71790350992a281bf0f37725ab23108
                     <td>{format(kot.date, "HH:mm:ss")}</td>
                   </tr>
                 ))

@@ -767,16 +767,6 @@ export default function KOTPanel({
 
     const nameRegex = /^[a-zA-Z\s\-]+$/;
     if (!nameRegex.test(customerName)) {
-<<<<<<< HEAD
-      alert(
-        "Name should contain only alphabets and may include spaces or hyphens"
-      );
-      return;
-    }
-
-    try {
-      const existingDoc = await getDoc(doc(db, "customers", customerPhone));
-=======
       alert("Name should contain only alphabets and may include spaces or hyphens");
       return;
     }
@@ -785,7 +775,6 @@ export default function KOTPanel({
     try {
       const existingDoc =
         await getDoc(doc(db, "customers", customerPhone));
->>>>>>> c8cb92abd71790350992a281bf0f37725ab23108
       if (existingDoc.exists()) {
         alert("Phone number already exists , please enter a new number.");
         return;
@@ -812,15 +801,9 @@ export default function KOTPanel({
       setCustomerName(customerName);
       setCustomerPoints(0);
       setIsCustomerModalOpen(false);
-<<<<<<< HEAD
-      setIsPaymentModalOpen(true);
-      setIsNewCustomer(false);
-      applyNewCustomerDiscount();
-=======
       setIsOrderTypeModalOpen(true); // Open order type modal after new customer creation
       setIsNewCustomer(true); // Mark as new customer for discount logic
       // applyNewCustomerDiscount(); // This will be called in updateTotals after order type selection
->>>>>>> c8cb92abd71790350992a281bf0f37725ab23108
     } catch (error) {
       console.error("Error creating customer:", error);
       alert("Error creating customer");
@@ -1395,14 +1378,7 @@ export default function KOTPanel({
                   placeholder="Customer Name"
                   value={customerName}
                   onChange={(e) => {
-<<<<<<< HEAD
-                    const cleaned = e.target.value.replace(
-                      /[^a-zA-Z\s\-]/g,
-                      ""
-                    );
-=======
                     const cleaned = e.target.value.replace(/[^a-zA-Z\s\-]/g, "");
->>>>>>> c8cb92abd71790350992a281bf0f37725ab23108
                     setCustomerName(cleaned);
                   }}
                 />
