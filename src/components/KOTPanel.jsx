@@ -128,7 +128,7 @@ export default function KOTPanel({
       }
       setOrderType(order.orderType || "dine-in");
       setCustomerName(order.customerName);
-      setCustomerPhone(order.customerPhone);
+      setCustomerPhone(order.phone); // Use phone from recalled order for consistency
       setIsEmployee(order.isEmployee);
 
       // Set payment details
@@ -171,21 +171,6 @@ export default function KOTPanel({
       alert("Employee must not be clocked in to use meal credits!");
       return;
     }
-
-    const handlePaymentSelection = () => {
-      if (paymentMethod) {
-        console.log("Payment method selected:", paymentMethod);
-        setIsPaymentModalOpen(false); // Close the modal
-      } else {
-        alert("Please select a payment method.");
-      }
-    };
-
-    const onBack = () => {
-      // Add your logic here (navigate back, close modal, or other)
-      console.log("Back to KOT clicked");
-      setIsPaymentModalOpen(false); // Or handle KOT screen logic
-    };
 
     // Set employee details and skip customer modal
     setCustomerId(employee.employeeID);
@@ -513,19 +498,11 @@ export default function KOTPanel({
       const results = [];
 
       // Process results
-      empPhoneSnap.forEach((doc) =>
-        results.push({
-          ...doc.data(),
-          phone: doc.id, // Document ID is phone number
-          isEmployee: true,
-        })
+      customerPhoneSnap.forEach((doc) =>
+        results.push({ ...doc.data(), isEmployee: false })
       );
-      empIdSnap.forEach((doc) =>
-        results.push({
-          ...doc.data(),
-          phone: doc.id, // Document ID remains phone number
-          isEmployee: true,
-        })
+      customerIdSnap.forEach((doc) =>
+        results.push({ ...doc.data(), isEmployee: false })
       );
       empPhoneSnap.forEach((doc) =>
         results.push({ ...doc.data(), isEmployee: true, EmployeeID: doc.id })
@@ -536,8 +513,10 @@ export default function KOTPanel({
 
       // Deduplicate and check clock-in status
       const uniqueResults = Array.from(
-        new Set(results.map((r) => r.phone || r.EmployeeID))
-      ).map((id) => results.find((r) => (r.phone || r.EmployeeID) === id));
+        new Set(results.map((r) => r.phone || r.EmployeeID || r.customerID))
+      ).map((id) =>
+        results.find((r) => (r.phone || r.EmployeeID || r.customerID) === id)
+      );
 
       const finalResults = await Promise.all(
         uniqueResults.map(async (result) => {
@@ -574,13 +553,28 @@ export default function KOTPanel({
     return `cus${String(number).padStart(2, "0")}`;
   };
 
-  const checkEmployeeClockInStatus = async (employeePhone) => {
+  const checkEmployeeClockInStatus = async (employeeId) => {
     try {
       const today = new Date();
       const monthDocId = `${today.getFullYear()}-${String(
         today.getMonth() + 1
       ).padStart(2, "0")}`;
       const dayKey = String(today.getDate()).padStart(2, "0");
+
+      const q = query(
+        collection(db, "users_01"),
+        where("employeeID", "==", employeeId)
+      );
+      const querySnapshot = await getDocs(q);
+
+      if (querySnapshot.empty) {
+        console.warn(`Employee with ID ${employeeId} not found.`);
+        return false;
+      }
+
+      const employeeDoc = querySnapshot.docs[0];
+      const employeePhone = employeeDoc.id; // Document ID is the phone number
+
       const attendanceRef = doc(
         db,
         "users_01",
@@ -653,9 +647,9 @@ export default function KOTPanel({
 
       // Remove duplicates
       const uniqueResults = Array.from(
-        new Set(manualResults.map((r) => r.phone || r.EmployeeID))
+        new Set(manualResults.map((r) => r.phone || r.EmployeeID || r.customerID))
       ).map((id) =>
-        manualResults.find((r) => (r.phone || r.EmployeeID) === id)
+        manualResults.find((r) => (r.phone || r.EmployeeID || r.customerID) === id)
       );
 
       // Check clock-in status
@@ -683,9 +677,10 @@ export default function KOTPanel({
     if (customer.isEmployee) {
       setIsEmployee(true);
       setCustomerId(customer.EmployeeID);
+      setCustomerPhone(customer.phone); // Ensure phone is set for employee
       const isClockedIn = await checkEmployeeClockInStatus(customer.EmployeeID); // Use EmployeeID for check
       if (isClockedIn) {
-        alert("Clocked-in employees cannot use loyalty program!");
+        alert("Clocked-in employees cannot use meal credits!");
         return;
       }
 
@@ -736,34 +731,34 @@ export default function KOTPanel({
 
   // --- MODIFICATION START: createNewCustomer logic refined ---
   const createNewCustomer = async () => {
-    if(!customerPhone && !customerName){
+    if (!customerPhone && !customerName) {
       alert("Please enter phone number and name");
       return;
-    }else if(!customerPhone){
+    } else if (!customerPhone) {
       alert("Please enter phone number");
       return;
-    }else if(!customerName){
+    } else if (!customerName) {
       alert("Please enter name");
       return;
     }
 
-  const phoneRegex = /^\d{10}$/;
-  if(!phoneRegex.test(customerPhone)){
-    alert("Phone number must be of 10 digits");
-    return;
-  }
+    const phoneRegex = /^\d{10}$/;
+    if (!phoneRegex.test(customerPhone)) {
+      alert("Phone number must be of 10 digits");
+      return;
+    }
 
-  const nameRegex=/^[a-zA-Z\s\-]+$/;
-  if(!nameRegex.test(customerName)){
-    alert("Name should contain only alphabets and may include spaces or hyphens");
-    return;
-  }
-  
+    const nameRegex = /^[a-zA-Z\s\-]+$/;
+    if (!nameRegex.test(customerName)) {
+      alert("Name should contain only alphabets and may include spaces or hyphens");
+      return;
+    }
 
-   try {
+
+    try {
       const existingDoc =
-       await getDoc(doc(db,"customers",customerPhone));
-      if(existingDoc.exists()){
+        await getDoc(doc(db, "customers", customerPhone));
+      if (existingDoc.exists()) {
         alert("Phone number already exists , please enter a new number.");
         return;
       }
@@ -777,27 +772,27 @@ export default function KOTPanel({
         userId: newUserId,
         name: customerName,
         phone: customerPhone,
-      points: 0,
-      createdAt: Timestamp.now(),
-      updatedAt: Timestamp.now(),
-    };
+        points: 0,
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      };
 
-    await setDoc(doc(db, "customers", customerPhone), customerData);
+      await setDoc(doc(db, "customers", customerPhone), customerData);
 
-    setCustomerId(newCustomerId);
-    setCustomerPhone(customerPhone);
-    setCustomerName(customerName);
-    setCustomerPoints(0);
-    setIsCustomerModalOpen(false);
-    setIsPaymentModalOpen(true);
-    setIsNewCustomer(false);
-    applyNewCustomerDiscount();
+      setCustomerId(newCustomerId);
+      setCustomerPhone(customerPhone);
+      setCustomerName(customerName);
+      setCustomerPoints(0);
+      setIsCustomerModalOpen(false);
+      setIsOrderTypeModalOpen(true); // Open order type modal after new customer creation
+      setIsNewCustomer(true); // Mark as new customer for discount logic
+      // applyNewCustomerDiscount(); // This will be called in updateTotals after order type selection
     } catch (error) {
       console.error("Error creating customer:", error);
       alert("Error creating customer");
     }
   };
-     // --- MODIFICATION END: createNewCustomer logic refined ---
+  // --- MODIFICATION END: createNewCustomer logic refined ---
 
   const handleGenerateKOT = async () => {
     let pointsToDeduct = 0;
@@ -945,11 +940,11 @@ export default function KOTPanel({
     ${
       isEmployee
         ? `<p><strong>Meal Credits Used:</strong> £${creditsUsed.toFixed(2)}</p>
-       ${
-         cashDue > 0
-           ? `<p><strong>Cash Due:</strong> £${cashDue.toFixed(2)}</p>`
-           : ""
-       }`
+        ${
+          cashDue > 0
+            ? `<p><strong>Cash Due:</strong> £${cashDue.toFixed(2)}</p>`
+            : ""
+        }`
         : ""
     }
 
@@ -998,7 +993,7 @@ export default function KOTPanel({
 
     ${
       customerId && !isEmployee && discount > 0
-        ? `<p style="color: green;"> Discount applied: ${pointsToDeduct} (Remaining Points: ${updatedPoints})</p>`
+        ? `<p style="color: green;"> Discount applied: £${pointsToDeduct.toFixed(2)} (Remaining Points: ${updatedPoints})</p>`
         : ""
     }
 
@@ -1070,14 +1065,13 @@ export default function KOTPanel({
     }
   };
 
-  const handleProcessPayment = () => {
-    if (!paymentMethod) {
-      setIsPaymentProcessed(true);
-      setIsPaymentModalOpen(false);
-    } else {
-      alert("Please select a payment method.");
-    }
+  const handleProcessPayment = (method) => {
+    setPaymentMethod(method);
+    setIsPaymentModalOpen(false);
+    setShowPaymentScreen(true); // Show PaymentScreen directly
   };
+
+
   return (
     <div className="p-4 w-full max-w-sm mx-auto">
       <h2 className="text-2xl font-bold mb-4">ORDER</h2>
@@ -1094,8 +1088,8 @@ export default function KOTPanel({
             <>
               Employee: {customerName} (ID: {customerId})
               <p>Meal Credits: £{employeeMealCredits}</p>
-              {creditsUsed > 0 && <p>Credits Used: £{creditsUsed}</p>}
-              {cashDue > 0 && <p>Cash Due: £{cashDue}</p>}
+              {creditsUsed > 0 && <p>Credits Used: £{creditsUsed.toFixed(2)}</p>}
+              {cashDue > 0 && <p>Cash Due: £{cashDue.toFixed(2)}</p>}
             </>
           ) : (
             <>
@@ -1103,7 +1097,7 @@ export default function KOTPanel({
               {customerPoints}
               {discount > 0 && (
                 <p className="text-green-600">
-                  £{discount} discount applied using points
+                  £{(discount - totalDiscount).toFixed(2)} discount applied using points
                 </p>
               )}
             </>
@@ -1346,13 +1340,13 @@ export default function KOTPanel({
               // New Customer Creation Form
               <>
                 <h3 className="text-xl font-bold mb-4">Add New Customer</h3>
-               Enter Name
+                Enter Name
                 <input
                   className="border p-2 mb-2 w-full"
                   placeholder="Customer Name"
                   value={customerName}
                   onChange={(e) => {
-                    const cleaned = e.target.value.replace(/[^a-zA-Z\s\-]/g,"");
+                    const cleaned = e.target.value.replace(/[^a-zA-Z\s\-]/g, "");
                     setCustomerName(cleaned);
                   }}
                 />
@@ -1363,8 +1357,8 @@ export default function KOTPanel({
                   value={customerPhone}
                   maxLength={10}
                   onChange={(e) => {
-                    const cleaned = e.target.value.replace(/\D/g,"");
-                    if(cleaned.length <= 10){
+                    const cleaned = e.target.value.replace(/\D/g, "");
+                    if (cleaned.length <= 10) {
                       setCustomerPhone(cleaned);
                     }
                   }}
@@ -1377,12 +1371,7 @@ export default function KOTPanel({
                     Back
                   </button>
                   <button
-                    onClick={() => {
-                      createNewCustomer();
-                      // --- MODIFICATION START: Removed redundant setIsOrderTypeModalOpen(true) here ---
-                      // setIsOrderTypeModalOpen(true); // This will be handled by createNewCustomer
-                      // --- MODIFICATION END ---
-                    }}
+                    onClick={createNewCustomer}
                     className="px-4 py-2 bg-blue-600 text-white rounded"
                   >
                     Save
@@ -1486,13 +1475,9 @@ export default function KOTPanel({
             <div className="flex justify-center gap-4">
               <button
                 onClick={() => {
-                  console.log("User selected: Dine-In");
-                  setIsOrderTypeModalOpen(false);
-                  // --- MODIFICATION START: Simplified modal flow ---
-                  // Removed setIsCustomerModalOpen(false) as it should already be closed
-                  setIsPaymentModalOpen(true); // Only open payment modal next
-                  // --- MODIFICATION END ---
                   setOrderType("dine-in");
+                  setIsOrderTypeModalOpen(false);
+                  setIsPaymentModalOpen(true); // Open payment modal next
                 }}
                 className="px-4 py-2 bg-green-600 text-white rounded"
               >
@@ -1500,13 +1485,9 @@ export default function KOTPanel({
               </button>
               <button
                 onClick={() => {
-                  console.log("User selected: Takeaway");
-                  setIsOrderTypeModalOpen(false);
-                  // --- MODIFICATION START: Simplified modal flow ---
-                  // Removed setIsCustomerModalOpen(false) as it should already be closed
-                  setIsPaymentModalOpen(true); // Only open payment modal next
-                  // --- MODIFICATION END ---
                   setOrderType("takeaway");
+                  setIsOrderTypeModalOpen(false);
+                  setIsPaymentModalOpen(true); // Open payment modal next
                 }}
                 className="px-4 py-2 bg-blue-600 text-white rounded"
               >
@@ -1527,21 +1508,53 @@ export default function KOTPanel({
               ✕
             </button>
             <h3 className="text-xl font-bold mb-4">Select Payment Method</h3>
-            <div className="flex justify-center gap-4 mb-4">
+            <div className="flex flex-col gap-4 mb-4">
               <button
                 className={`px-4 py-2 rounded ${
                   paymentMethod === "card"
                     ? "bg-green-600 text-white"
                     : "bg-gray-200"
                 }`}
+                onClick={() => handleProcessPayment("card")}
+              >
+                Card
+              </button>
+              <button
+                className={`px-4 py-2 rounded ${
+                  paymentMethod === "cash"
+                    ? "bg-green-600 text-white"
+                    : "bg-gray-200"
+                }`}
+                onClick={() => handleProcessPayment("cash")}
+              >
+                Cash
+              </button>
+              {isEmployee && total > 0 && ( // Show Meal Credit option only for employees with a remaining balance
+                <button
+                  className={`px-4 py-2 rounded ${
+                    paymentMethod === "Meal Credit"
+                      ? "bg-green-600 text-white"
+                      : "bg-gray-200"
+                  }`}
+                  onClick={() => handleProcessPayment("Meal Credit")}
+                >
+                  Meal Credit
+                </button>
+              )}
+              {/* This button is no longer needed as selection directly initiates PaymentScreen */}
+              {/* <button
                 onClick={() => {
-                  setPaymentMethod("card");
+                  if (!paymentMethod) {
+                    alert("Please select a payment method.");
+                    return;
+                  }
                   setShowPaymentScreen(true);
                   setIsPaymentModalOpen(false);
                 }}
+                className="bg-blue-600 text-white px-4 py-2 rounded"
               >
                 Proceed to Pay
-              </button>
+              </button> */}
             </div>
           </div>
         </div>
@@ -1552,6 +1565,7 @@ export default function KOTPanel({
           amount={total}
           isEmployee={isEmployee}
           customerPhone={customerPhone}
+          paymentMethod={paymentMethod} // Pass selected payment method
           onComplete={(success) => {
             setShowPaymentScreen(false);
             if (success) {

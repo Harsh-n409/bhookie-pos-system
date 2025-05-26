@@ -113,7 +113,7 @@ const ReportPage = () => {
       const items = await getDocs(collection(db, "items"));
       setItemsList(items.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
 
-      const users = await getDocs(collection(db, "users"));
+      const users = await getDocs(collection(db, "users_01")); // Changed to users_01 based on manager login
       setUsersList(users.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
     };
 
@@ -240,8 +240,8 @@ const ReportPage = () => {
       // Customer filter (assuming customerId in KOT)
       const matchesCustomer =
         !customerFilter.trim() ||
-        (kot.customerID &&
-          kot.customerID
+        (kot.customerId && // Changed from customerID to customerId for consistency with fetchKOTHistory
+          kot.customerId
             .toString()
             .toLowerCase()
             .includes(customerFilter.trim().toLowerCase()));
@@ -280,9 +280,14 @@ const ReportPage = () => {
     customerFilter,
     categoryFilter,
     itemNameFilter,
-    itemCategoryMap, // Add itemCategoryMap to dependencies
+    itemCategoryMap,
     selectedPeriod,
   ]);
+
+  const getUserName = (userId) => {
+    const user = usersList.find(user => user.employeeID === userId);
+    return user ? user.name : userId; // Return name if found, else return ID
+  };
 
   const summaryData = useMemo(() => {
     let totalSales = 0;
@@ -359,15 +364,15 @@ const ReportPage = () => {
       const rows = filteredSales.flatMap((kot) =>
         kot.items.map((item) => [
           item.name || "N/A",
-          kot.category || "N/A",
+          itemCategoryMap[item.name] || "Uncategorized", // Changed to use itemCategoryMap
           item.quantity,
           `${CURRENCY_SYMBOL}${item.price?.toFixed(2) || "0.00"}`,
           `${CURRENCY_SYMBOL}${
             (item.quantity * item.price)?.toFixed(2) || "0.00"
           }`,
           kot.orderType || "N/A",
-          kot.paymentMethod || "N/A",
-          kot.userId || "N/A",
+          kot.methodOfPayment || "N/A",
+          getUserName(kot.userId), // Changed to display user name
           format(kot.date, "HH:mm:ss"),
         ])
       );
@@ -401,7 +406,7 @@ const ReportPage = () => {
       doc.setFontSize(12);
       doc.text("Summary", 14, summaryY);
 
-      const summaryData = [
+      const summaryDataPDF = [ // Renamed to avoid conflict with outer summaryData
         [`Total Sales: ${CURRENCY_SYMBOL}${summaryData.totalSales.toFixed(2)}`],
         [`Total Orders: ${summaryData.totalOrders}`],
         [
@@ -413,7 +418,7 @@ const ReportPage = () => {
       ];
 
       doc.autoTable({
-        body: summaryData,
+        body: summaryDataPDF,
         startY: summaryY + 5,
         showHead: false,
         styles: {
@@ -526,8 +531,8 @@ const ReportPage = () => {
         "Least Sold",
         `${summaryData.leastSold.name} (${summaryData.leastSold.count})`,
       ],
-      ["Average Daily Sales", `${summaryData.averageDailySales}`],
-      ["Average Per Order", `${summaryData.averagePerOrder}`],
+      ["Average Daily Sales", `${CURRENCY_SYMBOL}${summaryData.averageDailySales.toFixed(2)}`], // Added currency symbol and fixed to 2 decimal places
+      ["Average Per Order", `${CURRENCY_SYMBOL}${summaryData.averagePerOrder.toFixed(2)}`], // Added currency symbol and fixed to 2 decimal places
     ];
 
     autoTable(doc, {
@@ -540,13 +545,13 @@ const ReportPage = () => {
     const itemRows = filteredSales.flatMap((kot) =>
       kot.items.map((item) => [
         item.name,
-        itemCategoryMap[item.name] || "Uncategorized",
+        itemCategoryMap[item.name] || "Uncategorized", // Changed to use itemCategoryMap
         item.quantity,
         item.price.toFixed(2),
         (item.price * item.quantity).toFixed(2),
         kot.orderType,
         kot.methodOfPayment,
-        kot.userId,
+        getUserName(kot.userId), // Changed to display user name
         format(kot.date, "HH:mm:ss"),
       ])
     );
@@ -600,16 +605,21 @@ const ReportPage = () => {
       );
 
       if (paymentFilter !== "all") {
-        baseQuery = query(
-          baseQuery,
-          where("paymentMethod", "==", paymentFilter)
-        );
-      }
+  baseQuery = query(
+    baseQuery,
+    where("methodOfPayment", "==", paymentFilter)
+  );
+}
+
 
       if (customerFilter) {
+        // Assuming customerId in Firestore is stored directly as "cus01" or "Walk-in"
+        // If it's stored as "customers/cus01", then the original line is correct.
+        // For broad compatibility, we might remove the "customers/" prefix if the input is just the ID.
+        // Let's assume customerId is stored directly as "cus01"
         baseQuery = query(
           baseQuery,
-          where("customerId", "==", `customers/${customerFilter}`)
+          where("customerId", "==", customerFilter)
         );
       }
 
@@ -630,7 +640,7 @@ const ReportPage = () => {
           amount: data.amount,
           customerId: data.customerId || null,
           earnedPoints: data.earnedPoints || 0,
-          userId: data.user_id,
+          userId: data.userId || data.user_id || "unknown",
           items: data.items || [],
           methodOfPayment: data.methodOfPayment || "unknown",
         });
@@ -681,18 +691,19 @@ const ReportPage = () => {
   };
 
   const formatSalesCSVData = () => {
-    return kotHistory.flatMap((kot) =>
+    return filteredSales.flatMap((kot) => // Changed from kotHistory to filteredSales
       kot.items.map((item) => ({
         "KOT ID": kot.kot_id,
         Date: kot.date.toLocaleDateString(),
         Time: kot.date.toLocaleTimeString(),
         "Item Name": item.name,
+        Category: itemCategoryMap[item.name] || "Uncategorized", // Added Category
         Quantity: item.quantity,
         "Unit Price": item.price,
         "Total Price": item.quantity * item.price,
         Customer: formatCustomerId(kot.customerId),
-        "Payment Method": kot.paymentMethod,
-        "Employee ID": kot.userId,
+        "Payment Method": kot.methodOfPayment,
+        "Employee Name": getUserName(kot.userId), // Changed to display user name
       }))
     );
   };
@@ -721,12 +732,12 @@ const ReportPage = () => {
       "KOT ID": kot.kot_id,
       Date: kot.date.toLocaleDateString(),
       Time: kot.date.toLocaleTimeString(),
-      "Customer ID": kot.customerId ? kot.customerId.split("/")[1] : "Walk-in",
-      Amount: `£${Number(kot.amount || 0).toFixed(2)}`, // <-- FIXED LINE
-      "Payment Method": kot.paymentMethod,
+      "Customer ID": formatCustomerId(kot.customerId),
+      Amount: `£${Number(kot.amount || 0).toFixed(2)}`,
+      "Payment Method": kot.methodOfPayment,
       "Earned Points": kot.earnedPoints,
       "Items Count": kot.items.length,
-      "User ID": kot.userId,
+      "Cashier Name": getUserName(kot.userId), // Changed to display user name
     }));
   };
 
@@ -746,7 +757,11 @@ const ReportPage = () => {
 
   const formatCustomerId = (customerId) => {
     if (!customerId) return "Walk-in";
-    return customerId.split("/")[1];
+    // Assuming customerId from Firestore might be "customers/cus01"
+    // If input is just "cus01", split might not be needed.
+    // Let's make it robust to handle both "customers/ID" and "ID"
+    const parts = customerId.split("/");
+    return parts.length > 1 ? parts[1] : customerId;
   };
 
   const filteredData = attendanceData.filter((log) =>
@@ -754,6 +769,7 @@ const ReportPage = () => {
   );
 
   const handleClose = () => {
+    logout(); // Added logout on close
     navigate("/");
   };
 
@@ -828,8 +844,8 @@ const ReportPage = () => {
                   setSelectedPeriod("custom");
                 }}
                 selectsStart
-                startDate={startDate}
-                endDate={endDate}
+                startDate={salesStartDate} // Changed from startDate to salesStartDate for consistency
+                endDate={salesEndDate}   // Changed from endDate to salesEndDate for consistency
                 dateFormat={DATE_FORMAT}
                 className="date-picker"
               />
@@ -840,9 +856,9 @@ const ReportPage = () => {
                   setSelectedPeriod("custom");
                 }}
                 selectsEnd
-                startDate={startDate}
-                endDate={endDate}
-                minDate={startDate}
+                startDate={salesStartDate} // Changed from startDate to salesStartDate for consistency
+                endDate={salesEndDate}   // Changed from endDate to salesEndDate for consistency
+                minDate={salesStartDate} // Changed from startDate to salesStartDate for consistency
                 dateFormat={DATE_FORMAT}
                 className="date-picker"
               />
@@ -899,7 +915,7 @@ const ReportPage = () => {
             <div className="filter-group">
               <label>Payment Method:</label>
               <select
-                value={paymentFilter} // Correctly using generic state
+                value={paymentFilter}
                 onChange={(e) => setPaymentFilter(e.target.value)}
               >
                 <option value="all">All Payments</option>
@@ -995,7 +1011,7 @@ const ReportPage = () => {
                 kot.items.map((item, index) => (
                   <tr key={`${kot.id}-${index}`}>
                     <td>{item.name || "Unknown Item"}</td>
-                    <td>{itemCategoryMap[item.name] || "Uncategorized"}</td>
+                    <td>{itemCategoryMap[item.name] || "Uncategorized"}</td> {/* Changed to use itemCategoryMap */}
 
                     <td>{item.quantity}</td>
                     <td>
@@ -1010,7 +1026,7 @@ const ReportPage = () => {
                     </td>
                     <td>{kot.orderType || "Unknown"}</td>
                     <td>{kot.methodOfPayment || "Unknown"}</td>
-                    <td>{kot.userId || "Unknown"}</td>
+                    <td>{getUserName(kot.userId)}</td> {/* Changed to display user name */}
                     <td>{format(kot.date, "HH:mm:ss")}</td>
                   </tr>
                 ))
@@ -1283,6 +1299,7 @@ const ReportPage = () => {
                     <th>Payment</th>
                     <th>Points</th>
                     <th>Items</th>
+                    <th>Cashier</th> {/* Changed header to Cashier */}
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -1299,6 +1316,7 @@ const ReportPage = () => {
                       <td>{kot.methodOfPayment || "unknown"}</td>
                       <td>{kot.earnedPoints}</td>
                       <td>{kot.items.length}</td>
+                      <td>{getUserName(kot.userId)}</td> {/* Changed to display user name */}
                       <td>
                         <button
                           onClick={() => handleViewDetails(kot.id)}
@@ -1345,8 +1363,8 @@ const ReportPage = () => {
                   <p>{selectedKOT.methodOfPayment || "unknown"}</p>
                 </div>
                 <div>
-                  <p className="font-semibold">User ID:</p>
-                  <p>{selectedKOT.user_id}</p>
+                  <p className="font-semibold">Cashier:</p> {/* Changed label to Cashier */}
+                  <p>{getUserName(selectedKOT.userId)}</p> {/* Changed to display user name */}
                 </div>
                 <div>
                   <p className="font-semibold">Earned Points:</p>
