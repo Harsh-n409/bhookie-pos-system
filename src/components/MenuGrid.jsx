@@ -87,7 +87,15 @@ export default function MenuGrid({
           id: doc.id,
           ...doc.data(),
         }));
-        setCategories(categoryData);
+
+        // Add new "meals" category with a temporary unique id
+        const mealsCategory = {
+          id: "meals-category-id",
+          name: "meals",
+          active: true,
+        };
+        const updatedCategories = [...categoryData, mealsCategory];
+        setCategories(updatedCategories);
 
         const offersSnap = await getDocs(
           query(collection(db, "Offers"), where("active", "==", true))
@@ -140,7 +148,20 @@ export default function MenuGrid({
               data.categoryId?.id || data.categoryId?.split("/").pop() || null,
           };
         });
-        setItems(itemData);
+
+        // Add new meal items with categoryId set to mealsCategory.id
+        const newMealItems = [
+          { id: "meal1", itemName: "Meals (Burger + Classic Fries + Soda Cans)", price: 7.49, categoryId: mealsCategory.id },
+          { id: "meal2", itemName: "Meals (Spicy Burger + Classic Fries + Soda Cans)", price: 7.99, categoryId: mealsCategory.id },
+          { id: "meal3", itemName: "Box Meals (Burger + Classic Fries + Soda Cans + Any Bites + Gravy)", price: 9.99, categoryId: mealsCategory.id },
+          { id: "meal4", itemName: "Box Meals (Spicy Burger + Classic Fries + Soda Cans + Any Bites + Gravy)", price: 10.49, categoryId: mealsCategory.id },
+          { id: "upgrade1", itemName: "Upgrade to Large", price: 0.69, categoryId: mealsCategory.id },
+          { id: "upgrade2", itemName: "Upgrade to Cheesy fries", price: 0.69, categoryId: mealsCategory.id },
+          { id: "upgrade3", itemName: "Upgrade to Noodle Bhel", price: 1.49, categoryId: mealsCategory.id },
+        ];
+
+        const updatedItems = [...itemData, ...newMealItems];
+        setItems(updatedItems);
 
         // Set up real-time inventory listeners for each item
         itemData.forEach((item) => {
