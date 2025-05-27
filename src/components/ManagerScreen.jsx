@@ -22,7 +22,9 @@ import { useNavigate } from "react-router-dom";
 
 const roleMap = {
   cash01: "cashier",
-  employee: "employee",
+  teammeber: "teammember",
+  teamleader:"teamleader",
+  admin:"admin"
   // Add other role mappings if needed
 };
 
@@ -399,7 +401,7 @@ export default function ManagerScreen() {
 
       if (needsReset) {
         const employeesSnap = await getDocs(
-          query(collection(db, "users_01"), where("role", "==", "employee"))
+          query(collection(db, "users_01"), where("role", "==", "teammember"||"teamleader"||"manager"))
         );
         const updatePromises = [];
 
@@ -409,7 +411,7 @@ export default function ManagerScreen() {
           const mealSnap = await getDoc(mealRef);
 
           if (mealSnap.exists()) {
-            const defaultCredits = mealSnap.data().defaultCredits;
+            const defaultCredits = mealSnap.data().defaultMealCredits;
             updatePromises.push(
               updateDoc(mealRef, { mealCredits: defaultCredits })
             );
@@ -455,7 +457,7 @@ export default function ManagerScreen() {
   const fetchEmployees = async () => {
     try {
       const snapshot = await getDocs(
-        query(collection(db, "users_01"), where("role", "==", "teammember"))
+        query(collection(db, "users_01"), where("role", "==", "teammember" || "teamleader" ||"manager"))
       );
       const today = new Date();
       const monthDocId = `${today.getFullYear()}-${String(

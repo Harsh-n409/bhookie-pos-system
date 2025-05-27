@@ -322,9 +322,7 @@ export default function MenuGrid({
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-2">
             {filteredItems.map((item) => {
               const stock = inventory[item.id]?.totalStockOnHand;
-              const isClickable =
-                clickableItems.includes(item.itemName.toLowerCase()) &&
-                (stock === undefined || stock > 0);
+              const isClickable = ( stock > 0);
 
               return (
                 <button
