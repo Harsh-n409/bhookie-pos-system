@@ -16,38 +16,35 @@ const PaymentScreen = ({ amount, isEmployee, onComplete, onClose }) => {
   // Derive tendered amount from input string for display and calculations
   const tendered = parseFloat(tenderedStr || '0');
   // Change due is calculated based on the current input vs. the remaining bill
-  const changeDue = Math.max(0, parseFloat((tendered - remainingAmount).toFixed(2)));
+  const changeDue = parseFloat((tendered - remainingAmount).toFixed(2));
 
   const quickCashValues = [5, 10, 20, 50];
 
-  // Handle number input including decimal, backspace, and clear
+  // Handle number input including backspace and clear
   const handleNumberInput = (value) => {
-    if (value === 'C') {
+    if (value === 'c') {
       setTenderedStr('');
     } else if (value === '⌫') {
-      setTenderedStr(prev => prev.slice(0, -1));
-    } else if (value === '.') {
-      if (!tenderedStr.includes('.')) {
-        setTenderedStr(prev => prev + '.');
-      }
-    } else if (value === '00') {
-      // Allow '00' only if it doesn't lead to "00", "00." etc.
-      if (tenderedStr === '' || tenderedStr === '0') {
-        setTenderedStr('0'); // Still '0'
-      } else {
-        setTenderedStr(prev => prev + value);
-      }
+      // Remove the last digit in the calculator style input
+      setTenderedStr(prev => {
+        if (!prev || prev.length === 0) return '';
+        // Remove last digit and shift right
+        let num = Math.floor(parseFloat(prev || '0') * 100);
+        num = Math.floor(num / 10);
+        return (num / 100).toFixed(2);
+      });
     } else {
-      // Prevent leading zeros unless it's a decimal, e.g., "0.5" is okay, "01" is not
-      if (tenderedStr === '0' && value !== '.') {
-        setTenderedStr(value); // Replace '0' with the new digit
-      } else {
-        // Prevent entering more than 2 decimal places
-        if (tenderedStr.includes('.') && tenderedStr.split('.')[1].length >= 2) {
-          return;
+      // Calculator style input: shift digits left and add new digit at rightmost decimal place
+      setTenderedStr(prev => {
+        let num = Math.floor(parseFloat(prev || '0') * 100);
+        // Shift left by one digit and add new digit
+        num = num * 10 + parseInt(value, 10);
+        // Limit to max 6 digits (e.g., 9999.99)
+        if (num > 999999) {
+          num = 999999;
         }
-        setTenderedStr(prev => prev + value);
-      }
+        return (num / 100).toFixed(2);
+      });
     }
   };
 
@@ -209,7 +206,9 @@ const PaymentScreen = ({ amount, isEmployee, onComplete, onClose }) => {
           <div>
             <div className="text-gray-500 text-xs">Change Due (Current Input)</div>
             {/* This changeDue is based on the current 'tendered' input and 'remainingAmount' */}
-            <div className="text-lg font-semibold">£{changeDue.toFixed(2)}</div>
+            <div className={`text-lg font-semibold ${changeDue < 0 ? 'text-red-500' : changeDue > 0 ? 'text-green-600' : ''}`}>
+              £{changeDue.toFixed(2)}
+            </div>
           </div>
         </div>
 
@@ -217,31 +216,29 @@ const PaymentScreen = ({ amount, isEmployee, onComplete, onClose }) => {
         <div className="flex">
           {/* Number Pad */}
           <div className="w-2/3 grid grid-cols-3 gap-1 p-2">
-            {[
+          {[
               '1', '2', '3',
               '4', '5', '6',
               '7', '8', '9',
-              '.', '0', '00',
-              '⌫', 'C'
+              '⌫', '0', 'C'
+            
             ].map((key) => (
               <button
                 key={key}
                 onClick={() => handleNumberInput(key)}
                 className={`p-2 rounded-md text-xl font-bold ${
                   key === 'C' ? 'bg-red-500 text-white' :
-                  key === '.' ? 'bg-gray-300' :
                   key === '⌫' ? 'bg-yellow-400 text-black' :
                   'bg-gray-100'
                 } hover:bg-gray-200`}
-                disabled={key === '.' && tenderedStr.includes('.')}
               >
                 {key}
               </button>
             ))}
           </div>
 
-          {/* Quick cash + Pay buttons */}
-          <div className="w-1/3 p-2 space-y-1">
+          {/* Quick cash buttons */}
+          <div className="flex flex-col justify-between p-2 w-1/3">
             {quickCashValues.map((value) => (
               <button
                 key={value}
@@ -250,42 +247,43 @@ const PaymentScreen = ({ amount, isEmployee, onComplete, onClose }) => {
                   // Ensure adding quick cash works correctly with floating point
                   return (current + value).toFixed(2);
                 })}
-                className="w-full p-2 bg-gray-100 hover:bg-gray-200 rounded-md text-sm font-semibold"
+                className="flex-1 w-full p-2 bg-gray-100 hover:bg-gray-200 rounded-md text-sm font-semibold mb-1 last:mb-0"
                 // Disable quick cash if already fully paid and it's not a cash input to make change
                 disabled={remainingAmount <= 0 && tendered >= remainingAmount}
               >
                 £{value}
               </button>
             ))}
-
-            {/* Cash Button */}
-            <button
-              onClick={() => processPayment("Cash")}
-              className={`w-full p-2 ${
-                activeMethod === "Cash" ? "bg-green-600" : "bg-green-500 hover:bg-green-600"
-              } rounded-md text-white text-sm font-bold`}
-              disabled={remainingAmount <= 0} // Disable if bill is fully paid
-            >
-              Cash
-            </button>
-
-            {/* Card Button */}
-            <button
-              onClick={() => {
-                // For Card, ensure the input field is set to the exact remaining amount before processing.
-                // This makes the validation inside processPayment more robust.
-                setTenderedStr(remainingAmount.toFixed(2));
-                setActiveMethod("Card");
-                processPayment("Card");
-              }}
-              className={`w-full p-2 ${
-                activeMethod === "Card" ? "bg-blue-600" : "bg-blue-500 hover:bg-blue-600"
-              } rounded-md text-white text-sm font-bold`}
-              disabled={remainingAmount <= 0} // Disable if bill is fully paid
-            >
-              Card
-            </button>
           </div>
+        </div>
+
+        {/* Cash and Card buttons at bottom */}
+        <div className="flex space-x-2 p-2">
+          <button
+            onClick={() => processPayment("Cash")}
+            className={`flex-1 p-2 ${
+              activeMethod === "Cash" ? "bg-green-600" : "bg-green-500 hover:bg-green-600"
+            } rounded-md text-white text-sm font-bold`}
+            disabled={remainingAmount <= 0} // Disable if bill is fully paid
+          >
+            Cash
+          </button>
+
+          <button
+            onClick={() => {
+              // For Card, ensure the input field is set to the exact remaining amount before processing.
+              // This makes the validation inside processPayment more robust.
+              setTenderedStr(remainingAmount.toFixed(2));
+              setActiveMethod("Card");
+              processPayment("Card");
+            }}
+            className={`flex-1 p-2 ${
+              activeMethod === "Card" ? "bg-blue-600" : "bg-blue-500 hover:bg-blue-600"
+            } rounded-md text-white text-sm font-bold`}
+            disabled={remainingAmount <= 0} // Disable if bill is fully paid
+          >
+            Card
+          </button>
         </div>
       </div>
     </div>
