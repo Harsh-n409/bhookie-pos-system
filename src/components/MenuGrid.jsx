@@ -168,6 +168,7 @@ export default function MenuGrid({
     return items.filter((item) => item.categoryId === selectedCategoryId);
   }, [items, selectedCategoryId]);
 
+  
   const handleItemClick = async (item) => {
     setSelectedItem(item);
     try {
