@@ -32,8 +32,6 @@ export default function MenuGrid({
   const [showOffers, setShowOffers] = useState(true);
   const [offers, setOffers] = useState([]);
 
-  
-
   // Clickable items - lowercased for comparison
   const clickableItems = [
     "chicken drumsticks",
@@ -193,20 +191,29 @@ export default function MenuGrid({
   }, [items, selectedCategoryId]);
 
   useEffect(() => {
-  console.log("FILTERED ITEMS:", filteredItems);
-}, [filteredItems]);
+    console.log("FILTERED ITEMS:", filteredItems);
+  }, [filteredItems]);
 
   const handleItemClick = async (item) => {
     setSelectedItem(item);
     try {
       if (item.requiresCustomization) {
         try {
-          // Fetch items from the customization category
+          const customizationCategoryRef = doc(
+            db,
+            "category",
+            item.customizationCategory
+          ); // Assuming item.customizationCategory is like "cat01"
+
+          console.log("category =", customizationCategoryRef.path); // This should now print
+
+          // ✅ Step 2: Query using DocumentReference
           const categoryQuery = query(
             collection(db, "items"),
-            where("categoryId", "==", item.customizationCategory),
+            where("categoryId", "==", customizationCategoryRef),
             where("active", "==", true)
           );
+
           const querySnapshot = await getDocs(categoryQuery);
           const options = querySnapshot.docs.map((doc) => ({
             id: doc.id,
