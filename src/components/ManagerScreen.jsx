@@ -947,15 +947,28 @@ export default function ManagerScreen() {
                               : "0.00"}
                           </td>
                           <td className="p-2 border">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleVoid(orderId);
-                              }}
-                              className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded"
-                            >
-                              Void Order
-                            </button>
+                            <div className="flex gap-2 justify-center">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  // Implement refund handler here
+                                  alert(`Refund order ${orderId}`);
+                                }}
+                                className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded"
+                              >
+                                Refund
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  // Implement print handler here
+                                  alert(`Print order ${orderId}`);
+                                }}
+                                className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded"
+                              >
+                                Print
+                              </button>
+                            </div>
                           </td>
                         </tr>
 
