@@ -948,18 +948,16 @@ export default function KOTPanel({
     color: #000;
     padding: 5px;
   ">
-    <div style="text-align: center; margin-bottom: 5px;">
-      <img src="./logo192.png" alt="Logo" style="width: 50px;" />
-    </div>
+      <div style="text-align: center; margin-bottom: 5px;">
 
-    <h3 style="text-align: center; margin: 0; padding: 5px 0;">KOT</h3>
+      <h3 style="text-align: center; margin: 0; padding: 5px 0;">Order</h3>
 
-    <p><strong>KOT ID:</strong> ${newKOTId}</p>
-    <p><strong>Cashier:</strong> ${cashierName} (${cashierId})</p>
-    <p><strong>Order Type:</strong> ${
-      orderType === "dine-in" ? "Dine In" : "Takeaway"
-    }</p>
-    <p><strong>Time:</strong> ${new Date().toLocaleString()}</p>
+      <p><strong>Order ID:</strong> ${orderId || newKOTId}</p>
+      <p><strong>Cashier:</strong> ${cashierName} (${cashierId})</p>
+      <p><strong>Order Type:</strong> ${
+        orderType === "dine-in" ? "Dine In" : "Takeaway"
+      }</p>
+      <p><strong>Time:</strong> ${new Date().toLocaleString()}</p>
 
     ${
       customerId
@@ -1108,9 +1106,9 @@ export default function KOTPanel({
     <div className="p-4 w-full max-w-sm mx-auto">
       <h2 className="text-2xl font-bold mb-4">ORDER</h2>
 
-      {kotId && (
+      {(orderId || kotId) && (
         <div className="mb-4 text-base font-semibold text-indigo-700 border border-indigo-300 rounded p-2 bg-indigo-50">
-          KOT ID: <span className="font-mono">{kotId}</span>
+          Order ID: <span className="font-mono">{orderId || kotId}</span>
         </div>
       )}
 
