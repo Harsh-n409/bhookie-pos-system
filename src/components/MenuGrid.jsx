@@ -13,8 +13,14 @@ import { db } from "../firebase/config";
 export default function MenuGrid({
   onAddItem = () => {},
   onApplyOffer = () => {},
-  appliedOffers
+  appliedOffers,
 }) {
+  const [showUpgradePopup, setShowUpgradePopup] = useState(false);
+  const [upgradeOptions, setUpgradeOptions] = useState([]);
+  const [selectedForUpgrade, setSelectedForUpgrade] = useState(null);
+  const [showCustomizationPopup, setShowCustomizationPopup] = useState(false);
+  const [customizationOptions, setCustomizationOptions] = useState([]);
+  const [selectedMeal, setSelectedMeal] = useState(null);
   const [categories, setCategories] = useState([]);
   const [items, setItems] = useState([]);
   const [inventory, setInventory] = useState({});
@@ -89,12 +95,7 @@ export default function MenuGrid({
         }));
 
         // Add new "meals" category with a temporary unique id
-        const mealsCategory = {
-          id: "meals-category-id",
-          name: "meals",
-          active: true,
-        };
-        const updatedCategories = [...categoryData, mealsCategory];
+        const updatedCategories = categoryData;
         setCategories(updatedCategories);
 
         const offersSnap = await getDocs(
@@ -150,18 +151,18 @@ export default function MenuGrid({
         });
 
         // Add new meal items with categoryId set to mealsCategory.id
-        const newMealItems = [
-          { id: "meal1", itemName: "Meals (Burger + Classic Fries + Soda Cans)", price: 7.49, categoryId: mealsCategory.id },
-          { id: "meal2", itemName: "Meals (Spicy Burger + Classic Fries + Soda Cans)", price: 7.99, categoryId: mealsCategory.id },
-          { id: "meal3", itemName: "Box Meals (Burger + Classic Fries + Soda Cans + Any Bites + Gravy)", price: 9.99, categoryId: mealsCategory.id },
-          { id: "meal4", itemName: "Box Meals (Spicy Burger + Classic Fries + Soda Cans + Any Bites + Gravy)", price: 10.49, categoryId: mealsCategory.id },
-          { id: "upgrade1", itemName: "Upgrade to Large", price: 0.69, categoryId: mealsCategory.id },
-          { id: "upgrade2", itemName: "Upgrade to Cheesy fries", price: 0.69, categoryId: mealsCategory.id },
-          { id: "upgrade3", itemName: "Upgrade to Noodle Bhel", price: 1.49, categoryId: mealsCategory.id },
-        ];
+        // const newMealItems = [
+        //   { id: "meal1", itemName: "Meals (Burger + Classic Fries + Soda Cans)", price: 7.49, categoryId: mealsCategory.id },
+        //   { id: "meal2", itemName: "Meals (Spicy Burger + Classic Fries + Soda Cans)", price: 7.99, categoryId: mealsCategory.id },
+        //   { id: "meal3", itemName: "Box Meals (Burger + Classic Fries + Soda Cans + Any Bites + Gravy)", price: 9.99, categoryId: mealsCategory.id },
+        //   { id: "meal4", itemName: "Box Meals (Spicy Burger + Classic Fries + Soda Cans + Any Bites + Gravy)", price: 10.49, categoryId: mealsCategory.id },
+        //   { id: "upgrade1", itemName: "Upgrade to Large", price: 0.69, categoryId: mealsCategory.id },
+        //   { id: "upgrade2", itemName: "Upgrade to Cheesy fries", price: 0.69, categoryId: mealsCategory.id },
+        //   { id: "upgrade3", itemName: "Upgrade to Noodle Bhel", price: 1.49, categoryId: mealsCategory.id },
+        // ];
 
-        const updatedItems = [...itemData, ...newMealItems];
-        setItems(updatedItems);
+        // const updatedItems = [...itemData, ...newMealItems];
+        setItems(itemData);
 
         // Set up real-time inventory listeners for each item
         itemData.forEach((item) => {
@@ -189,27 +190,71 @@ export default function MenuGrid({
     return items.filter((item) => item.categoryId === selectedCategoryId);
   }, [items, selectedCategoryId]);
 
+  useEffect(() => {
+    console.log("FILTERED ITEMS:", filteredItems);
+  }, [filteredItems]);
 
-
-  
   const handleItemClick = async (item) => {
     setSelectedItem(item);
     try {
-      if (item.sauces) {
-        const sauceGroupSnap = await getDoc(item.sauces);
-        if (sauceGroupSnap.exists()) {
-          const sauceList = sauceGroupSnap.data().sauces || [];
-          setSauces(sauceList);
-          setShowSaucePopup(true);
-          return;
+      if (item.requiresCustomization) {
+        try {
+          const customizationCategoryRef = doc(
+            db,
+            "category",
+            item.customizationCategory
+          ); // Assuming item.customizationCategory is like "cat01"
+
+          console.log("category =", customizationCategoryRef.path); // This should now print
+
+          // ✅ Step 2: Query using DocumentReference
+          const categoryQuery = query(
+            collection(db, "items"),
+            where("categoryId", "==", customizationCategoryRef),
+            where("active", "==", true)
+          );
+
+          const querySnapshot = await getDocs(categoryQuery);
+          const options = querySnapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          }));
+
+          setCustomizationOptions(options);
+          setSelectedMeal(item);
+          setShowCustomizationPopup(true);
+        } catch (err) {
+          console.error("Error fetching customization options:", err);
+        }
+      } else {
+        // First add the base item
+        onAddItem({
+          id: item.id,
+          name: item.itemName,
+          price: item.price,
+          quantity: 1,
+        });
+
+        // Check for available upgrades
+        const q = query(
+          collection(db, "items"),
+          where("categoryId", "==", "upgrades"),
+          where("parentCategory", "==", "meals")
+        );
+
+        const querySnapshot = await getDocs(q);
+        const upgrades = querySnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+          stock: inventory[doc.id]?.totalStockOnHand || 0,
+        }));
+
+        if (upgrades.length > 0) {
+          setSelectedForUpgrade(item);
+          setUpgradeOptions(upgrades);
+          setShowUpgradePopup(true);
         }
       }
-      onAddItem({
-        id: item.id,
-        name: item.itemName,
-        price: item.price,
-        quantity: 1,
-      });
     } catch (err) {
       console.error("Error fetching sauces:", err);
       onAddItem({
@@ -221,6 +266,34 @@ export default function MenuGrid({
     }
   };
 
+  const handleMealCustomization = (selectedOption) => {
+    if (selectedMeal) {
+      onAddItem({
+        id: selectedMeal.id,
+        name: selectedMeal.itemName,
+        price: selectedMeal.price,
+        quantity: 1,
+        customization: {
+          category: selectedMeal.customizationCategory,
+          selected: selectedOption.itemName,
+        },
+      });
+    }
+    setShowCustomizationPopup(false);
+    setSelectedMeal(null);
+  };
+
+  const handleAddUpgrade = (upgrade) => {
+    onAddItem({
+      id: upgrade.id,
+      name: upgrade.itemName,
+      price: upgrade.price,
+      quantity: 1,
+      parentItem: selectedForUpgrade.id,
+      isUpgrade: true,
+    });
+    setShowUpgradePopup(false);
+  };
   const handleSelectSauce = (sauce) => {
     if (selectedItem) {
       onAddItem({
@@ -236,48 +309,49 @@ export default function MenuGrid({
   };
 
   const handleAddOffer = async (offer) => {
-  try {
-    // Check if offer is already applied
-    if (appliedOffers.some(o => o.id === offer.id)) {
-      alert("This offer is already applied!");
-      return;
-    }
+    try {
+      // Check if offer is already applied
+      if (appliedOffers.some((o) => o.id === offer.id)) {
+        alert("This offer is already applied!");
+        return;
+      }
 
-    // Get fresh offer data
-    const offerSnap = await getDoc(doc(db, "Offers", offer.id));
-    const offerData = offerSnap.data();
+      // Get fresh offer data
+      const offerSnap = await getDoc(doc(db, "Offers", offer.id));
+      const offerData = offerSnap.data();
 
-    // Calculate discount
-    const originalTotal = offer.items.reduce(
-      (sum, item) => sum + item.price,
-      0
-    );
-    const discount = originalTotal - offerData.offerPrice;
+      // Calculate discount
+      const originalTotal = offer.items.reduce(
+        (sum, item) => sum + item.price,
+        0
+      );
+      const discount = originalTotal - offerData.offerPrice;
 
-    // Apply offer
-    onApplyOffer(discount, {
-      id: offer.id,
-      name: offerData.title,
-      discountAmount: discount,
-      items: offer.items.map(i => i.id)
-    });
-
-    // Add items with offer association
-    offer.items.forEach((item) => {
-      onAddItem({
-        id: item.id,
-        name: item.itemName,
-        price: item.price,
-        quantity: 1,
-        associatedOffer: offer.id
+      // Apply offer
+      onApplyOffer(discount, {
+        id: offer.id,
+        name: offerData.title,
+        discountAmount: discount,
+        items: offer.items.map((i) => i.id),
       });
-    });
-  } catch (error) {
-    console.error("Error applying offer:", error);
-  }
-};
+
+      // Add items with offer association
+      offer.items.forEach((item) => {
+        onAddItem({
+          id: item.id,
+          name: item.itemName,
+          price: item.price,
+          quantity: 1,
+          associatedOffer: offer.id,
+        });
+      });
+    } catch (error) {
+      console.error("Error applying offer:", error);
+    }
+  };
 
   const handleCategoryClick = (categoryId) => {
+    console.log(categoryId);
     setSelectedCategoryId(categoryId);
     setShowOffers(false);
   };
@@ -325,7 +399,7 @@ export default function MenuGrid({
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-2">
             {filteredItems.map((item) => {
               const stock = inventory[item.id]?.totalStockOnHand;
-              const isClickable = ( stock > 0);
+              const isClickable = stock > 0 && !item.isUpgrade;
 
               return (
                 <button
@@ -421,6 +495,85 @@ export default function MenuGrid({
           )
         )}
       </div>
+
+      {showCustomizationPopup && selectedMeal && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-40">
+          <div className="bg-white rounded-lg p-5 shadow-lg max-w-md w-full">
+            <h2 className="text-xl font-bold mb-5 text-purple-900">
+              Customize {selectedMeal.itemName}
+            </h2>
+
+            {customizationOptions.length > 0 ? (
+              <div className="grid grid-cols-2 gap-3">
+                {customizationOptions.map((option) => (
+                  <button
+                    key={option.id}
+                    onClick={() => handleMealCustomization(option)}
+                    className="p-3 bg-purple-100 hover:bg-purple-200 rounded-lg text-left"
+                  >
+                    <div className="font-semibold">{option.itemName}</div>
+                    {option.price > 0 && (
+                      <div className="text-sm">+£{option.price.toFixed(2)}</div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="text-gray-500">No options available</div>
+            )}
+
+            <button
+              onClick={() => setShowCustomizationPopup(false)}
+              className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showUpgradePopup && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-50">
+          <div className="bg-white rounded-lg p-5 shadow-lg max-w-md w-full">
+            <h2 className="text-xl font-bold mb-5 text-purple-900">
+              Available Upgrades for {selectedForUpgrade?.itemName}
+            </h2>
+            <div className="grid grid-cols-2 gap-3">
+              {upgradeOptions.map((upgrade) => {
+                const isOutOfStock =
+                  (inventory[upgrade.id]?.totalStockOnHand || 0) <= 0;
+
+                return (
+                  <button
+                    key={upgrade.id}
+                    onClick={() => !isOutOfStock && handleAddUpgrade(upgrade)}
+                    className={`p-3 rounded-lg text-left ${
+                      isOutOfStock
+                        ? "bg-gray-200 cursor-not-allowed"
+                        : "bg-blue-100 hover:bg-blue-200"
+                    }`}
+                    disabled={isOutOfStock}
+                  >
+                    <div className="font-semibold">{upgrade.itemName}</div>
+                    <div className="text-sm">+£{upgrade.price.toFixed(2)}</div>
+                    {isOutOfStock && (
+                      <div className="text-red-500 text-xs mt-1">
+                        Out of stock
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              onClick={() => setShowUpgradePopup(false)}
+              className="mt-4 px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+            >
+              No Thanks
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Sauce Popup */}
       {showSaucePopup && selectedItem && (
