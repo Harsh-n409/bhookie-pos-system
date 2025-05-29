@@ -949,6 +949,7 @@ export default function KOTPanel({
     padding: 5px;
   ">
       <div style="text-align: center; margin-bottom: 5px;">
+        <img src="/logo192.png" alt="Logo" style="max-width: 100px; margin-bottom: 10px;" />
 
       <h3 style="text-align: center; margin: 0; padding: 5px 0;">Order</h3>
 
