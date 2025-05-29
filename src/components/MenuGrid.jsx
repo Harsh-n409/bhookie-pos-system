@@ -266,7 +266,7 @@ export default function MenuGrid({
     }
   };
 
-  const handleMealCustomization = (selectedOption) => {
+    const handleMealCustomization = (selectedOption) => {
     if (selectedMeal) {
       onAddItem({
         id: selectedMeal.id,
