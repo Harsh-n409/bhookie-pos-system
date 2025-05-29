@@ -96,10 +96,12 @@ const PaymentScreen = ({ amount, isEmployee, onComplete, onClose }) => {
       // Card: Must be exact remaining amount
       // If the input field has an amount, we could validate it,
       // but the button click for Card should implicitly mean paying the *remaining* amount.
-      if (paymentAmount > 0 && paymentAmount.toFixed(2) !== remainingAmount.toFixed(2)) {
-         alert(`For Card payments, please enter the exact remaining amount: £${remainingAmount.toFixed(2)}. Or just click 'Card' to pay the exact amount.`);
-         return;
-      }
+      if (paymentAmount.toFixed(2) !== remainingAmount.toFixed(2)) {
+ alert(`Card payments must be exactly £${remainingAmount.toFixed(2)}.`);
+
+  return;
+}
+
       amountToApplyToBill = remainingAmount; // Card always pays the exact remaining
       actualTenderedForRecord = remainingAmount; // Record the exact amount charged
       currentChangeDue = 0; // No change for card payments
@@ -273,9 +275,10 @@ const PaymentScreen = ({ amount, isEmployee, onComplete, onClose }) => {
             onClick={() => {
               // For Card, ensure the input field is set to the exact remaining amount before processing.
               // This makes the validation inside processPayment more robust.
-              setTenderedStr(remainingAmount.toFixed(2));
-              setActiveMethod("Card");
-              processPayment("Card");
+             setTenderedStr(remainingAmount.toFixed(2));
+             setActiveMethod("Card");
+             processPayment("Card");
+
             }}
             className={`flex-1 p-2 ${
               activeMethod === "Card" ? "bg-blue-600" : "bg-blue-500 hover:bg-blue-600"

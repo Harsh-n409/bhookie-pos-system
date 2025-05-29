@@ -197,21 +197,27 @@ const ReportPage = () => {
       }
 
       const querySnapshot = await getDocs(baseQuery);
-      const newHistory = querySnapshot.docs.map((doc) => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          ...data,
-          date: data.date.toDate(),
-          amount: parseFloat(data.amount) || 0, // Ensure numeric amount
-          items: (data.items || []).map((item) => ({
-            ...item,
-            price: parseFloat(item.price) || 0, // Ensure numeric price
-            quantity: parseInt(item.quantity) || 0, // Ensure numeric quantity
-          })),
-          methodOfPayment:data.methodOfPayment,
-        };
-      });
+      const newHistory = querySnapshot.docs
+  .map((doc) => {
+    const data = doc.data();
+    return {
+      id: doc.id,
+      ...data,
+      date: data.date.toDate(),
+      amount: parseFloat(data.amount) || 0,
+      items: (data.items || []).map((item) => ({
+        ...item,
+        price: parseFloat(item.price) || 0,
+        quantity: parseInt(item.quantity) || 0,
+      })),
+      methodOfPayment: data.methodOfPayment || "Unknown", // Handle missing field
+    };
+  })
+  .filter((kot) => {
+    if (paymentFilter === "all") return true;
+    return kot.methodOfPayment === paymentFilter;
+  });
+
 
       setKotHistory(newHistory);
     } catch (error) {
@@ -604,12 +610,8 @@ const ReportPage = () => {
         orderBy("date", "desc")
       );
 
-      if (paymentFilter !== "all") {
-  baseQuery = query(
-    baseQuery,
-    where("methodOfPayment", "==", paymentFilter)
-  );
-}
+      
+
 
 
       if (customerFilter) {
@@ -629,22 +631,25 @@ const ReportPage = () => {
       }
 
       const querySnapshot = await getDocs(paginatedQuery);
-      const newHistory = [];
-
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        newHistory.push({
-          id: doc.id,
-          kot_id: data.kot_id,
-          date: data.date.toDate(),
-          amount: data.amount,
-          customerId: data.customerId || null,
-          earnedPoints: data.earnedPoints || 0,
-          userId: data.userId || data.user_id || "unknown",
-          items: data.items || [],
-          methodOfPayment: data.methodOfPayment || "unknown",
-        });
-      });
+      const newHistory = querySnapshot.docs
+       .map((doc) => {
+    const data = doc.data();
+    return {
+      id: doc.id,
+      kot_id: data.kot_id,
+      date: data.date.toDate(),
+      amount: data.amount,
+      customerId: data.customerId || null,
+      earnedPoints: data.earnedPoints || 0,
+      userId: data.userId || data.user_id || "unknown",
+      items: data.items || [],
+      methodOfPayment: data.methodOfPayment || "Unknown", // Normalize here
+    };
+  })
+  .filter((kot) => {
+    if (paymentFilter === "all") return true;
+    return kot.methodOfPayment === paymentFilter;
+  });
 
       if (querySnapshot.docs.length > 0) {
         setLastVisible(querySnapshot.docs[querySnapshot.docs.length - 1]);
