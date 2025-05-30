@@ -952,30 +952,50 @@ export default function KOTPanel({
         <img src="/logo192.png" alt="Logo" style="max-width: 100px; margin-bottom: 10px;" />
 
       <h3 style="text-align: center; margin: 0; padding: 5px 0;">Order</h3>
-
-      <p><strong>Order ID:</strong> ${orderId || newKOTId}</p>
-      <p><strong>Cashier:</strong> ${cashierName} (${cashierId})</p>
-      <p><strong>Order Type:</strong> ${
-        orderType === "dine-in" ? "Dine In" : "Takeaway"
-      }</p>
-      <p><strong>Time:</strong> ${new Date().toLocaleString()}</p>
+      </div>
+      <div style="text-align: left; margin-top: 10px;">
+      <div style="display: flex; justify-content: space-between;">
+        <span><strong>Order ID:</strong></span>
+        <span>${orderId || newKOTId}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between;">
+        <span><strong>Cashier:</strong></span>
+        <span>${cashierName} (${cashierId})</span>
+      </div>
+      <div style="display: flex; justify-content: space-between;">
+        <span><strong>Order Type:</strong></span>
+        <span>${orderType === "dine-in" ? "Dine In" : "Takeaway"}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between;">
+        <span><strong>Time:</strong></span>
+        <span>${new Date().toLocaleString()}</span>
+      </div>
 
     ${
       customerId
-        ? `<p><strong>${
-            isEmployee ? "Employee" : "Customer"
-          }:</strong> ${customerName} (${customerId})</p>`
+        ? `<div style="display: flex; justify-content: space-between;">
+            <span><strong>${
+              isEmployee ? "Employee" : "Customer"
+            }:</strong></span>
+            <span>${customerName} (${customerId})</span>
+          </div>`
         : ""
     }
 
     ${
       isEmployee
-        ? `<p><strong>Meal Credits Used:</strong> £${creditsUsed.toFixed(2)}</p>
-        ${
-          cashDue > 0
-            ? `<p><strong>Cash Due:</strong> £${cashDue.toFixed(2)}</p>`
-            : ""
-        }`
+        ? `<div style="display: flex; justify-content: space-between;">
+            <span><strong>Meal Credits Used:</strong></span>
+            <span>£${creditsUsed.toFixed(2)}</span>
+          </div>
+          ${
+            cashDue > 0
+              ? `<div style="display: flex; justify-content: space-between;">
+                  <span><strong>Cash Due:</strong></span>
+                  <span>£${cashDue.toFixed(2)}</span>
+                </div>`
+              : ""
+          }`
         : ""
     }
 
@@ -1016,11 +1036,18 @@ export default function KOTPanel({
 
     <hr style="border: none; border-top: 1px dashed #000; margin: 6px 0;" />
 
-    <p><strong>Sub Total:</strong> £${subTotal.toFixed(2)}</p>
-    <p><strong>Discount:</strong> £${
-      isEmployee ? creditsUsed.toFixed(2) : (subTotal - total).toFixed(2)
-    }</p>
-    <p><strong>Total:</strong> £${total.toFixed(2)}</p>
+    <div style="display: flex; justify-content: space-between;">
+      <span><strong>Sub Total:</strong></span>
+      <span>£${subTotal.toFixed(2)}</span>
+    </div>
+    <div style="display: flex; justify-content: space-between;">
+      <span><strong>Discount:</strong></span>
+      <span>£${isEmployee ? creditsUsed.toFixed(2) : (subTotal - total).toFixed(2)}</span>
+    </div>
+    <div style="display: flex; justify-content: space-between;">
+      <span><strong>Total:</strong></span>
+      <span>£${total.toFixed(2)}</span>
+    </div>
 
     ${
       customerId && !isEmployee && discount > 0
