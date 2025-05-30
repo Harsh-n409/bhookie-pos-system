@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { db } from "../firebase/config";
 import { increment, where } from "firebase/firestore";
 import { useLocation } from "react-router-dom";
-import { writeBatch } from "firebase/firestore";
 import { v4 as uuidv4 } from "uuid";
 import PaymentScreen from "./PaymentScreen";
 import {
@@ -59,10 +58,6 @@ export default function KOTPanel({
   const [isNewCustomerMode, setIsNewCustomerMode] = useState(false);
   const [earnedPoints, setEarnedPoints] = useState(0);
 
-  const userId = "1234"; // Replace with logged-in user ID
-  // const [autoProcessEmployee, setAutoProcessEmployee] = useState(null);
-
-  // Add this useEffect hook
 
   useEffect(() => {
     if (isPaymentProcessed) {
@@ -101,16 +96,7 @@ export default function KOTPanel({
     customerPoints,
   ]);
 
-  const allowedItems = [
-    "Chicken bites",
-    "Chicken Drumsticks",
-    "Manchurian bites",
-    "Vadapav",
-    "Bhaji pav",
-    "Veggie Alootikki burger",
-    "Chicken burger",
-    "Chai",
-  ];
+
 
   // In KOTPanel.jsx - Update the useEffect for recalled orders
   useEffect(() => {
@@ -166,23 +152,23 @@ export default function KOTPanel({
     }
   }, [isEmployee, customerId]);
 
-  const handleAutoProcessEmployee = async (employee) => {
-    if (employee.isClockedIn) {
-      alert("Employee must not be clocked in to use meal credits!");
-      return;
-    }
+  // const handleAutoProcessEmployee = async (employee) => {
+  //   if (employee.isClockedIn) {
+  //     alert("Employee must not be clocked in to use meal credits!");
+  //     return;
+  //   }
 
-    // Set employee details and skip customer modal
-    setCustomerId(employee.employeeID);
-    setCustomerName(employee.name);
-    setCustomerPhone(employee.phone);
-    setEmployeeMealCredits(employee.mealCredits);
-    setIsEmployee(true);
-    setIsCustomerModalOpen(false); // Explicitly close customer modal
+  //   // Set employee details and skip customer modal
+  //   setCustomerId(employee.employeeID);
+  //   setCustomerName(employee.name);
+  //   setCustomerPhone(employee.phone);
+  //   setEmployeeMealCredits(employee.mealCredits);
+  //   setIsEmployee(true);
+  //   setIsCustomerModalOpen(false); // Explicitly close customer modal
 
-    // Open payment modal directly
-    setIsPaymentModalOpen(true);
-  };
+  //   // Open payment modal directly
+  //   setIsPaymentModalOpen(true);
+  // };
 
   const updateInventory = async (kotItems) => {
     try {
@@ -193,7 +179,7 @@ export default function KOTPanel({
 
         if (itemSnap.exists()) {
           const inventoryData = itemSnap.data();
-          const { unitsPerInner, innerPerBox, totalStockOnHand } =
+          const {  totalStockOnHand } =
             inventoryData;
 
           // Calculate total units sold
