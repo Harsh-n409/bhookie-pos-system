@@ -22,7 +22,7 @@ const PaymentScreen = ({ amount, isEmployee, onComplete, onClose }) => {
 
   // Handle number input including backspace and clear
   const handleNumberInput = (value) => {
-    if (value === 'c') {
+    if (value === 'C') {
       setTenderedStr('');
     } else if (value === '⌫') {
       // Remove the last digit in the calculator style input
@@ -93,17 +93,10 @@ const PaymentScreen = ({ amount, isEmployee, onComplete, onClose }) => {
         currentChangeDue = parseFloat((paymentAmount - remainingAmount).toFixed(2));
       }
     } else if (method === "Card") {
-      // Card: Must be exact remaining amount
-      // If the input field has an amount, we could validate it,
-      // but the button click for Card should implicitly mean paying the *remaining* amount.
-      if (paymentAmount.toFixed(2) !== remainingAmount.toFixed(2)) {
- alert(`Card payments must be exactly £${remainingAmount.toFixed(2)}.`);
-
-  return;
-}
-
-      amountToApplyToBill = remainingAmount; // Card always pays the exact remaining
-      actualTenderedForRecord = remainingAmount; // Record the exact amount charged
+      // Card: Accept any amount (changed from exact remaining amount)
+      // Remove the exact amount validation
+      amountToApplyToBill = paymentAmount; // Apply the amount entered
+      actualTenderedForRecord = paymentAmount; // Record the amount charged
       currentChangeDue = 0; // No change for card payments
     } else {
       // Other payment methods (e.g., UPI, etc. if you add them later)

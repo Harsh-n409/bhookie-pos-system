@@ -909,7 +909,7 @@ export default function KOTPanel({
     setIsNewCustomer(false); // This is an existing customer/employee
     updateTotals(); // Recalculate totals after setting customer/employee info
 
-    setIsCustomerModalOpen(false); // Close customer modal
+    setIsCustomerModalOpen(true); // Close customer modal
     setIsOrderTypeModalOpen(true); // Open order type modal next
   };
   // --- MODIFICATION END: handleSelectCustomer logic refined ---
@@ -1729,7 +1729,7 @@ export default function KOTPanel({
                 onClick={() => {
                   setOrderType("dine-in");
                   setIsOrderTypeModalOpen(false);
-                  setIsPaymentModalOpen(true); // Open payment modal next
+                  setShowPaymentScreen(true); // Show payment screen directly
                 }}
                 className="px-4 py-2 bg-green-600 text-white rounded"
               >
@@ -1739,7 +1739,7 @@ export default function KOTPanel({
                 onClick={() => {
                   setOrderType("takeaway");
                   setIsOrderTypeModalOpen(false);
-                  setIsPaymentModalOpen(true); // Open payment modal next
+                  setShowPaymentScreen(true); // Show payment screen directly
                 }}
                 className="px-4 py-2 bg-blue-600 text-white rounded"
               >
