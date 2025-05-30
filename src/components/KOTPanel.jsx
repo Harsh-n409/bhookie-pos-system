@@ -57,13 +57,32 @@ export default function KOTPanel({
   const location = useLocation();
   const [isNewCustomerMode, setIsNewCustomerMode] = useState(false);
   const [earnedPoints, setEarnedPoints] = useState(0);
-
+  const [isRefundMode, setIsRefundMode] = useState(false);
+  const [originalOrder, setOriginalOrder] = useState(null);
+  const [refundedItems, setRefundedItems] = useState([]);
 
   useEffect(() => {
     if (isPaymentProcessed) {
       handleGenerateKOT();
     }
   }, [isPaymentProcessed]);
+
+  useEffect(() => {
+    if (location.state?.refundOrder) {
+      const order = location.state.refundOrder;
+      // ...existing recall logic...
+      setIsRefundMode(true);
+      setOriginalOrder(order);
+      setRefundedItems(
+        order.items.map((item) => ({
+          ...item,
+          // Calculate remaining refundable quantity
+          remainingQuantity: item.quantity - (item.refundedQuantity || 0),
+          refundQuantity: 0, // Start with 0 for this refund session
+        }))
+      );
+    }
+  }, [location.state]);
 
   // Add this useEffect in KOTPanel component
   useEffect(() => {
@@ -95,8 +114,6 @@ export default function KOTPanel({
     totalDiscount,
     customerPoints,
   ]);
-
-
 
   // In KOTPanel.jsx - Update the useEffect for recalled orders
   useEffect(() => {
@@ -179,8 +196,7 @@ export default function KOTPanel({
 
         if (itemSnap.exists()) {
           const inventoryData = itemSnap.data();
-          const {  totalStockOnHand } =
-            inventoryData;
+          const { totalStockOnHand } = inventoryData;
 
           // Calculate total units sold
           const totalUnitsSold = item.quantity;
@@ -400,6 +416,183 @@ export default function KOTPanel({
       setIsCustomerModalOpen(true);
     }
     // --- MODIFICATION END: handlePayClick logic refined ---
+  };
+
+  const handleRefundQuantityChange = (index, value) => {
+    const updated = [...refundedItems];
+    updated[index].refundQuantity = Math.min(value, updated[index].quantity);
+    setRefundedItems(updated);
+  };
+
+  const processRefund = async () => {
+    try {
+      // Validate refund quantities
+      const hasRefund = refundedItems.some((item) => item.refundQuantity > 0);
+      if (!hasRefund) {
+        alert("Please select items to refund");
+        return;
+      }
+
+      // Create refund transaction
+      const refundData = {
+        originalOrderId: originalOrder.id,
+        date: Timestamp.now(),
+        items: refundedItems.filter((item) => item.refundQuantity > 0),
+        refundAmount: refundedItems.reduce(
+          (sum, item) => sum + item.price * item.refundQuantity,
+          0
+        ),
+        processedBy: originalOrder.cashierName,
+      };
+
+      // Update KOT document first
+      const kotRef = doc(db, "KOT", originalOrder.id);
+      await runTransaction(db, async (transaction) => {
+        const kotDoc = await transaction.get(kotRef);
+        if (!kotDoc.exists()) {
+          throw new Error("Original order not found");
+        }
+
+        const kotData = kotDoc.data();
+        const updatedItems = [...kotData.items];
+        let totalRefundedAmount = 0;
+        let isFullyRefunded = true;
+
+        // Update items with refund quantities
+        refundedItems.forEach((refundItem) => {
+          if (refundItem.refundQuantity > 0) {
+            const originalItemIndex = updatedItems.findIndex(
+              (item) => item.id === refundItem.id
+            );
+
+            if (originalItemIndex !== -1) {
+              // Calculate new refunded quantity (previous + current)
+              const newRefundedQuantity =
+                (updatedItems[originalItemIndex].refundedQuantity || 0) +
+                refundItem.refundQuantity;
+
+              // Update refund quantities
+              updatedItems[originalItemIndex].refundedQuantity =
+                newRefundedQuantity;
+
+              // Check if fully refunded
+              updatedItems[originalItemIndex].refunded =
+                newRefundedQuantity ===
+                updatedItems[originalItemIndex].quantity;
+
+              // Calculate refund amount
+              const itemRefundAmount =
+                refundItem.price * refundItem.refundQuantity;
+              totalRefundedAmount += itemRefundAmount;
+            }
+          }
+        });
+
+        isFullyRefunded = updatedItems.every(
+          (item) => item.refundedQuantity === item.quantity
+        );
+
+        transaction.update(kotRef, {
+          items: updatedItems,
+          refunded: isFullyRefunded,
+          refundedAmount: (kotData.refundedAmount || 0) + totalRefundedAmount,
+        });
+      });
+
+      // Update inventory
+      for (const item of refundedItems) {
+        if (item.refundQuantity > 0) {
+          const itemRef = doc(db, "inventory", item.id);
+          await updateDoc(itemRef, {
+            totalStockOnHand: increment(item.refundQuantity),
+          });
+        }
+      }
+
+      // Reverse loyalty points - FETCH CUSTOMER DOC BY ID
+      if (originalOrder.customerID && !originalOrder.isEmployee) {
+        // Query customer by customerID
+        const customerQuery = query(
+          collection(db, "customers"),
+          where("customerID", "==", originalOrder.customerID)
+        );
+        const customerSnapshot = await getDocs(customerQuery);
+
+        if (!customerSnapshot.empty) {
+          const customerDoc = customerSnapshot.docs[0];
+          const customerRef = doc(db, "customers", customerDoc.id);
+          const customerData = customerDoc.data();
+
+          await runTransaction(db, async (transaction) => {
+            // Calculate total points to deduct
+            let totalPointsToDeduct = 0;
+            refundedItems.forEach((item) => {
+              if (item.refundQuantity > 0) {
+                const pointsToDeduct = Math.floor(
+                  originalOrder.earnedPoints *
+                    (item.refundQuantity / item.quantity)
+                );
+                totalPointsToDeduct += pointsToDeduct;
+              }
+            });
+
+            transaction.update(customerRef, {
+              points: increment(-totalPointsToDeduct),
+            });
+          });
+        } else {
+          console.warn(
+            "Customer document not found for ID:",
+            originalOrder.customerID
+          );
+        }
+      }
+
+      // Reverse meal credits for employees - FETCH EMPLOYEE DOC BY ID
+      if (originalOrder.isEmployee && originalOrder.employeeId) {
+        // Query employee by employeeID
+        const employeeQuery = query(
+          collection(db, "users_01"),
+          where("employeeID", "==", originalOrder.employeeId)
+        );
+        const employeeSnapshot = await getDocs(employeeQuery);
+
+        if (!employeeSnapshot.empty) {
+          const employeeDoc = employeeSnapshot.docs[0];
+          const mealRef = doc(db, "users_01", employeeDoc.id, "meal", "1");
+
+          // Calculate total credits to restore
+          let totalCreditsToRestore = 0;
+          refundedItems.forEach((item) => {
+            if (item.refundQuantity > 0) {
+              const creditsToRestore =
+                originalOrder.creditsUsed *
+                (item.refundQuantity / item.quantity);
+              totalCreditsToRestore += creditsToRestore;
+            }
+          });
+
+          await updateDoc(mealRef, {
+            mealCredits: increment(totalCreditsToRestore),
+          });
+        } else {
+          console.warn(
+            "Employee document not found for ID:",
+            originalOrder.employeeId
+          );
+        }
+      }
+
+      // Save refund record
+      await addDoc(collection(db, "refunds"), refundData);
+
+      alert("Refund processed successfully!");
+      setIsRefundMode(false);
+      clearItems();
+    } catch (error) {
+      console.error("Refund failed:", error);
+      alert(`Refund processing failed: ${error.message}`);
+    }
   };
 
   const generateKOTId = async (dateObj) => {
@@ -650,9 +843,13 @@ export default function KOTPanel({
 
       // Remove duplicates
       const uniqueResults = Array.from(
-        new Set(manualResults.map((r) => r.phone || r.EmployeeID || r.customerID))
+        new Set(
+          manualResults.map((r) => r.phone || r.EmployeeID || r.customerID)
+        )
       ).map((id) =>
-        manualResults.find((r) => (r.phone || r.EmployeeID || r.customerID) === id)
+        manualResults.find(
+          (r) => (r.phone || r.EmployeeID || r.customerID) === id
+        )
       );
 
       // Check clock-in status
@@ -753,14 +950,14 @@ export default function KOTPanel({
 
     const nameRegex = /^[a-zA-Z\s\-]+$/;
     if (!nameRegex.test(customerName)) {
-      alert("Name should contain only alphabets and may include spaces or hyphens");
+      alert(
+        "Name should contain only alphabets and may include spaces or hyphens"
+      );
       return;
     }
 
-
     try {
-      const existingDoc =
-        await getDoc(doc(db, "customers", customerPhone));
+      const existingDoc = await getDoc(doc(db, "customers", customerPhone));
       if (existingDoc.exists()) {
         alert("Phone number already exists , please enter a new number.");
         return;
@@ -850,11 +1047,15 @@ export default function KOTPanel({
         creditsUsed: isEmployee ? creditsUsed : 0,
         cashPaid: isEmployee ? cashDue : total,
         earnedPoints: earnedPoints,
+        refunded: false, // NEW: Indicates if order is fully refunded
+        refundedAmount: 0,
         items: kotItems.map((item) => ({
           id: item.id,
           name: item.name,
           quantity: item.quantity,
           price: item.price,
+          refundedQuantity: 0, // NEW: Track refunded quantities per item
+          refunded: false, // NEW: Indicates if item is fully refunded
         })),
         orderType: orderType,
         methodOfPayment: paymentMethod,
@@ -1010,7 +1211,9 @@ export default function KOTPanel({
 
     ${
       customerId && !isEmployee && discount > 0
-        ? `<p style="color: green;"> Discount applied: £${pointsToDeduct.toFixed(2)} (Remaining Points: ${updatedPoints})</p>`
+        ? `<p style="color: green;"> Discount applied: £${pointsToDeduct.toFixed(
+            2
+          )} (Remaining Points: ${updatedPoints})</p>`
         : ""
     }
 
@@ -1088,7 +1291,6 @@ export default function KOTPanel({
     setShowPaymentScreen(true); // Show PaymentScreen directly
   };
 
-
   return (
     <div className="p-4 w-full max-w-sm mx-auto">
       <h2 className="text-2xl font-bold mb-4">ORDER</h2>
@@ -1105,7 +1307,9 @@ export default function KOTPanel({
             <>
               Employee: {customerName} (ID: {customerId})
               <p>Meal Credits: £{employeeMealCredits}</p>
-              {creditsUsed > 0 && <p>Credits Used: £{creditsUsed.toFixed(2)}</p>}
+              {creditsUsed > 0 && (
+                <p>Credits Used: £{creditsUsed.toFixed(2)}</p>
+              )}
               {cashDue > 0 && <p>Cash Due: £{cashDue.toFixed(2)}</p>}
             </>
           ) : (
@@ -1114,7 +1318,8 @@ export default function KOTPanel({
               {customerPoints}
               {discount > 0 && (
                 <p className="text-green-600">
-                  £{(discount - totalDiscount).toFixed(2)} discount applied using points
+                  £{(discount - totalDiscount).toFixed(2)} discount applied
+                  using points
                 </p>
               )}
             </>
@@ -1363,7 +1568,10 @@ export default function KOTPanel({
                   placeholder="Customer Name"
                   value={customerName}
                   onChange={(e) => {
-                    const cleaned = e.target.value.replace(/[^a-zA-Z\s\-]/g, "");
+                    const cleaned = e.target.value.replace(
+                      /[^a-zA-Z\s\-]/g,
+                      ""
+                    );
                     setCustomerName(cleaned);
                   }}
                 />
@@ -1546,18 +1754,19 @@ export default function KOTPanel({
               >
                 Cash
               </button>
-              {isEmployee && total > 0 && ( // Show Meal Credit option only for employees with a remaining balance
-                <button
-                  className={`px-4 py-2 rounded ${
-                    paymentMethod === "Meal Credit"
-                      ? "bg-green-600 text-white"
-                      : "bg-gray-200"
-                  }`}
-                  onClick={() => handleProcessPayment("Meal Credit")}
-                >
-                  Meal Credit
-                </button>
-              )}
+              {isEmployee &&
+                total > 0 && ( // Show Meal Credit option only for employees with a remaining balance
+                  <button
+                    className={`px-4 py-2 rounded ${
+                      paymentMethod === "Meal Credit"
+                        ? "bg-green-600 text-white"
+                        : "bg-gray-200"
+                    }`}
+                    onClick={() => handleProcessPayment("Meal Credit")}
+                  >
+                    Meal Credit
+                  </button>
+                )}
               {/* This button is no longer needed as selection directly initiates PaymentScreen */}
               {/* <button
                 onClick={() => {
@@ -1591,6 +1800,69 @@ export default function KOTPanel({
           }}
           onClose={() => setShowPaymentScreen(false)}
         />
+      )}
+
+      {isRefundMode && (
+        <div className="mb-4 p-3 bg-yellow-100 border border-yellow-300 rounded">
+          <h3 className="font-bold text-lg mb-2">Refund Mode</h3>
+          <p>Original Order: {originalOrder.kot_id}</p>
+
+          <div className="mt-3 overflow-auto max-h-60">
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Original Qty</th>
+                  <th>Refunded</th>
+                  <th>Refund Qty</th>
+                  <th>Refund Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {refundedItems.map((item, index) => (
+                  <tr key={index}>
+                    <td>{item.name}</td>
+                    <td>{item.quantity}</td>
+                    <td>{item.refundedQuantity || 0}</td>
+                    <td>
+                      <input
+                        type="number"
+                        min="0"
+                        max={item.remainingQuantity} // Use remaining quantity
+                        value={item.refundQuantity}
+                        onChange={(e) => {
+                          const updated = [...refundedItems];
+                          updated[index].refundQuantity = Math.min(
+                            parseInt(e.target.value || 0),
+                            item.remainingQuantity // Enforce remaining quantity limit
+                          );
+                          setRefundedItems(updated);
+                        }}
+                        className="w-16 border p-1"
+                      />
+                    </td>
+                    <td>£{(item.price * item.refundQuantity).toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-4 flex justify-between">
+            <button
+              onClick={() => setIsRefundMode(false)}
+              className="bg-gray-500 text-white px-4 py-2 rounded"
+            >
+              Cancel Refund
+            </button>
+            <button
+              onClick={processRefund}
+              className="bg-red-600 text-white px-4 py-2 rounded"
+            >
+              Process Refund
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

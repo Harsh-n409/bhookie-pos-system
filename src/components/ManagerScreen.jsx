@@ -23,8 +23,8 @@ import { useNavigate } from "react-router-dom";
 const roleMap = {
   cash01: "cashier",
   teammeber: "teammember",
-  teamleader:"teamleader",
-  admin:"admin"
+  teamleader: "teamleader",
+  admin: "admin",
   // Add other role mappings if needed
 };
 
@@ -401,12 +401,15 @@ export default function ManagerScreen() {
 
       if (needsReset) {
         const employeesSnap = await getDocs(
-          query(collection(db, "users_01"), where("role", "==", "teammember"||"teamleader"||"manager"))
+          query(
+            collection(db, "users_01"),
+            where("role", "==", "teammember" || "teamleader" || "manager")
+          )
         );
         const updatePromises = [];
 
         for (const empDoc of employeesSnap.docs) {
-          const phone=empDoc.id;
+          const phone = empDoc.id;
           const mealRef = doc(db, "users_01", phone, "meal", "1");
           const mealSnap = await getDoc(mealRef);
 
@@ -448,16 +451,19 @@ export default function ManagerScreen() {
     fetchOrders();
   };
 
-  const handleVoid = async (orderId) => {
-    await deleteDoc(doc(db, "KOT", orderId));
-    setSelectedItemInfo(null);
-    fetchOrders();
-  };
+  // const handleVoid = async (orderId) => {
+  //   await deleteDoc(doc(db, "KOT", orderId));
+  //   setSelectedItemInfo(null);
+  //   fetchOrders();
+  // };
 
   const fetchEmployees = async () => {
     try {
       const snapshot = await getDocs(
-        query(collection(db, "users_01"), where("role", "==", "teammember" || "teamleader" ||"manager"))
+        query(
+          collection(db, "users_01"),
+          where("role", "==", "teammember" || "teamleader" || "manager")
+        )
       );
       const today = new Date();
       const monthDocId = `${today.getFullYear()}-${String(
@@ -468,15 +474,14 @@ export default function ManagerScreen() {
       const employeePromises = snapshot.docs.map(async (empDoc) => {
         const phone = empDoc.id;
         const data = empDoc.data();
-       const attendanceDocRef = doc(
-        db,
-        "users_01",
-        phone,
-        "attendance",
-        monthDocId
-      );
-      const attendanceSnap = await getDoc(attendanceDocRef);
-
+        const attendanceDocRef = doc(
+          db,
+          "users_01",
+          phone,
+          "attendance",
+          monthDocId
+        );
+        const attendanceSnap = await getDoc(attendanceDocRef);
 
         let isClockedIn = false;
         if (attendanceSnap.exists()) {
@@ -486,21 +491,21 @@ export default function ManagerScreen() {
         }
 
         const mealRef = doc(db, "users_01", phone, "meal", "1");
-      const mealSnap = await getDoc(mealRef);;
+        const mealSnap = await getDoc(mealRef);
         const mealData = mealSnap.exists() ? mealSnap.data() : {};
 
-         return {
-        id: phone, // Document ID is phone number
-        employeeID: data.employeeID, // From document field
-        name: data.name,
-        phone: phone,
-        role: data.role,
-        active: data.active,
-        meal: mealSnap.exists() ? mealSnap.data() : {},
-        isClockedIn: attendanceSnap.exists() ? 
-          attendanceSnap.data().days?.[dayKey]?.isClockedIn || false : false
-      };
-
+        return {
+          id: phone, // Document ID is phone number
+          employeeID: data.employeeID, // From document field
+          name: data.name,
+          phone: phone,
+          role: data.role,
+          active: data.active,
+          meal: mealSnap.exists() ? mealSnap.data() : {},
+          isClockedIn: attendanceSnap.exists()
+            ? attendanceSnap.data().days?.[dayKey]?.isClockedIn || false
+            : false,
+        };
       });
 
       const resolvedData = await Promise.all(employeePromises);
@@ -907,7 +912,9 @@ export default function ManagerScreen() {
                       (total, item) => total + (item.quantity || 0),
                       0
                     );
-
+                    const isFullyRefunded = order.refunded;
+                    const isPartiallyRefunded =
+                      order.refundedAmount > 0 && !order.refunded;
                     const isSelected = selectedOrderInfo?.orderId === orderId;
 
                     return (
@@ -936,27 +943,48 @@ export default function ManagerScreen() {
                           <td className="p-2 border">
                             {order.customerID || "N/A"}
                           </td>
+          
                           <td className="p-2 border">
                             {order.user_id || "N/A"}
                           </td>
                           <td className="p-2 border">{totalItems || 0}</td>
                           <td className="p-2 border">
                             £
-                            {order.amount
-                              ? Number(order.amount).toFixed(2)
-                              : "0.00"}
+                            {(
+                              order.amount - (order.refundedAmount || 0)
+                            ).toFixed(2)}
+                            {isPartiallyRefunded && (
+                              <span className="text-yellow-600 text-xs block">
+                                (Refunded: £{order.refundedAmount.toFixed(2)})
+                              </span>
+                            )}
+                            {isFullyRefunded && (
+                              <span className="text-red-600 text-xs block">
+                                FULLY REFUNDED
+                              </span>
+                            )}
                           </td>
                           <td className="p-2 border">
                             <div className="flex gap-2 justify-center">
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  // Implement refund handler here
-                                  alert(`Refund order ${orderId}`);
+                                  if (order.refunded) return;
+                                  navigate("/", {
+                                    state: {
+                                      refundOrder: order,
+                                      originalOrderId: order.id,
+                                    },
+                                  });
                                 }}
-                                className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded"
+                                className={`${
+                                  order.refunded
+                                    ? "bg-gray-400 cursor-not-allowed"
+                                    : "bg-red-500 hover:bg-red-600"
+                                } text-white px-3 py-1 rounded`}
+                                disabled={order.refunded}
                               >
-                                Refund
+                                {order.refunded ? "Refunded" : "Refund"}
                               </button>
                               <button
                                 onClick={(e) => {
@@ -982,7 +1010,18 @@ export default function ManagerScreen() {
                                 <ul className="list-disc list-inside">
                                   {order.items.map((item, idx) => (
                                     <li key={idx}>
-                                      {item.name} × {item.quantity} — £
+                                      {item.name} × {item.quantity}
+                                      {item.refundedQuantity > 0 && (
+                                        <span className="text-red-600">
+                                          (Refunded: {item.refundedQuantity})
+                                        </span>
+                                      )}
+                                      {item.refunded && (
+                                        <span className="text-red-600 ml-2">
+                                          [FULLY REFUNDED]
+                                        </span>
+                                      )}
+                                      — £
                                       {(item.price * item.quantity).toFixed(2)}
                                     </li>
                                   ))}
