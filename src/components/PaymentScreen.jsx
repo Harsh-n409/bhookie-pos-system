@@ -199,7 +199,7 @@ const PaymentScreen = ({ amount, isEmployee, onComplete, onClose }) => {
             </div>
           </div>
           <div>
-            <div className="text-gray-500 text-xs">Change Due (Current Input)</div>
+            <div className="text-gray-500 text-xs">Change Due</div>
             {/* This changeDue is based on the current 'tendered' input and 'remainingAmount' */}
             <div className={`text-lg font-semibold ${changeDue < 0 ? 'text-red-500' : changeDue > 0 ? 'text-green-600' : ''}`}>
               £{changeDue.toFixed(2)}
