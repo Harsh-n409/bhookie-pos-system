@@ -72,7 +72,7 @@ export default function ManagerScreen() {
     };
   }, [logout]);
 
-  const handleSignInCashier = async () => {
+  const handleOpenCashier = async (cashierId) => {
     const trimmedCode = cashierCode.trim();
     if (!trimmedCode) {
       setCashierStatus("Please enter a valid employee ID.");
@@ -115,12 +115,12 @@ export default function ManagerScreen() {
       const attendanceRefCheck = query(
         collection(db, "cashierAttendance"),
         where("cashierId", "==", trimmedCode),
-        where("isSignedIn", "==", true)
+        where("isOpen", "==", true)
       );
       const attendanceSnapCheck = await getDocs(attendanceRefCheck);
 
       if (!attendanceSnapCheck.empty) {
-        setCashierStatus("Cashier is already signed in.");
+        setCashierStatus("Cashier is already open.");
         setCashierCode("");
         setCashierLoading(false);
         return;
@@ -148,8 +148,8 @@ export default function ManagerScreen() {
         await setDoc(newAttendanceRef, {
           cashierId: trimmedCode,
           cashierName: userData.name || "Unnamed Cashier",
-          isSignedIn: true,
-          isOpen: false,
+          isSignedIn: false,
+          isOpen: true,
           openTimes: [],
           closeTimes: [],
           signInTime: serverTimestamp(),
@@ -157,8 +157,8 @@ export default function ManagerScreen() {
       } else {
         const existingDoc = attendanceSnap.docs[0];
         await updateDoc(doc(db, "cashierAttendance", existingDoc.id), {
-          isSignedIn: true,
-          isOpen: false,
+          isSignedIn: false,
+          isOpen: true,
           signInTime: serverTimestamp(),
         });
       }
@@ -170,17 +170,17 @@ export default function ManagerScreen() {
         role: role,
       });
       setCashierId(trimmedCode);
-      setCashierStatus(`Cashier ${userData.name} signed in successfully.`);
+      setCashierStatus(`Cashier ${userData.name} opened successfully.`);
       setCashierCode("");
     } catch (error) {
-      console.error("Sign In error:", error);
-      setCashierStatus("Something went wrong during sign in.");
+      console.error("Open Cashier error:", error);
+      setCashierStatus("Something went wrong while Opening Cashier.");
     } finally {
       setCashierLoading(false);
     }
   };
 
-  const handleSignOutCashier = async () => {
+  const handleCloseCashier = async (cashierId) => {
     const trimmedCode = cashierCode.trim();
 
     if (!trimmedCode) {
@@ -216,7 +216,7 @@ export default function ManagerScreen() {
       const attSnap = await getDocs(attQuery);
 
       if (attSnap.empty) {
-        setCashierStatus("Cashier is already signed out.");
+        setCashierStatus("Cashier is already closed.");
         return;
       }
 
@@ -263,17 +263,17 @@ export default function ManagerScreen() {
         console.log("No active cash session to close.");
       }
 
-      setCashierStatus("Cashier signed out successfully.");
+      setCashierStatus("Cashier closed successfully.");
       setCashierCode(""); // Clear input
     } catch (error) {
-      console.error("Sign Out error:", error);
-      setCashierStatus("An error occurred during sign out.");
+      console.error("closing Out error:", error);
+      setCashierStatus("An error occurred during closing cashier.");
     } finally {
       setCashierLoading(false);
     }
   };
 
-  const handleOpenCashier = async (cashierId) => {
+  const handleSignInCashier = async () => {
     try {
       // 1. Verify signed-in cashier
       const q = query(
@@ -283,7 +283,7 @@ export default function ManagerScreen() {
       );
       const snapshot = await getDocs(q);
       if (snapshot.empty) {
-        alert("Cashier is not signed in. Cannot open cashier.");
+        alert("Cashier is not open. Cannot sign in cashier.");
         return;
       }
 
@@ -293,7 +293,7 @@ export default function ManagerScreen() {
 
       // 2. Prevent reopening if already open
       if (cashierData.isOpen) {
-        alert("Cashier is already open.");
+        alert("Cashier is already Signed In.");
         return;
       }
 
@@ -325,12 +325,12 @@ export default function ManagerScreen() {
 
       alert("Cashier opened successfully.");
     } catch (error) {
-      console.error("Open Cashier error:", error);
-      alert("Failed to open cashier.");
+      console.error("Sign In Cashier error:", error);
+      alert("Failed to Sign In cashier.");
     }
   };
 
-  const handleCloseCashier = async (cashierId) => {
+  const handleSignOutCashier = async () => {
     try {
       // 1. Verify that the cashier is signed in
       const q = query(
@@ -340,7 +340,7 @@ export default function ManagerScreen() {
       );
       const snapshot = await getDocs(q);
       if (snapshot.empty) {
-        alert("Cashier is not signed in. Cannot close cashier.");
+        alert("Cashier is not open. Cannot Sign Out cashier.");
         return;
       }
 
@@ -350,7 +350,7 @@ export default function ManagerScreen() {
 
       // 2. Prevent closing if already closed
       if (!cashierData.isOpen) {
-        alert("Cashier is already closed.");
+        alert("Cashier is already Signed Out.");
         return;
       }
 
@@ -378,10 +378,10 @@ export default function ManagerScreen() {
         console.log("No open cash session found to pause.");
       }
 
-      alert("Cashier closed successfully.");
+      alert("Cashier Signed Out successfully.");
     } catch (error) {
-      console.error("Close Cashier error:", error);
-      alert("Failed to close cashier.");
+      console.error("Sign Out Cashier error:", error);
+      alert("Failed to Signed Out cashier.");
     }
   };
 
@@ -1139,6 +1139,15 @@ export default function ManagerScreen() {
             )}
 
             <div className="flex flex-wrap gap-4">
+              {/* Open Cashier */}
+              <button
+                onClick={() => handleOpenCashier(cashierCode)}
+                className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-900"
+                disabled={!cashierCode}
+              >
+                Open Cashier
+              </button>
+
               {/* Sign In */}
               <button
                 onClick={handleSignInCashier}
@@ -1150,23 +1159,6 @@ export default function ManagerScreen() {
                 {cashierLoading ? "Signing In..." : "Sign In Cashier"}
               </button>
 
-              {/* Open Cashier */}
-              <button
-                onClick={() => handleOpenCashier(cashierCode)}
-                className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-900"
-                disabled={!cashierCode}
-              >
-                Open Cashier
-              </button>
-
-              {/* Close Cashier */}
-              <button
-                onClick={() => handleCloseCashier(cashierCode)}
-                className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-900"
-                disabled={!cashierCode}
-              >
-                Close Cashier
-              </button>
 
               {/* Sign Out */}
               <button
@@ -1175,6 +1167,15 @@ export default function ManagerScreen() {
                 disabled={!cashierCode}
               >
                 Sign Out Cashier
+              </button>
+
+               {/* Close Cashier */}
+              <button
+                onClick={() => handleCloseCashier(cashierCode)}
+                className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-900"
+                disabled={!cashierCode}
+              >
+                Close Cashier
               </button>
             </div>
           </div>
