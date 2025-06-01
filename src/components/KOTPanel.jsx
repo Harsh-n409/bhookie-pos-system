@@ -1127,6 +1127,12 @@ export default function KOTPanel({
       }
 
       // ✅ Print KOT
+      // Prepare highlighted order ID string
+      const fullOrderId = orderId || newKOTId;
+      const orderIdPrefix = fullOrderId.slice(0, -3);
+      const orderIdLastThree = fullOrderId.slice(-3);
+      const highlightedOrderId = `${orderIdPrefix}<span style="color: red; font-weight: bold;">${orderIdLastThree}</span>`;
+
       const printContent = `
   <div style="
     width: 280px;
@@ -1143,7 +1149,7 @@ export default function KOTPanel({
       <div style="text-align: left; margin-top: 10px;">
       <div style="display: flex; justify-content: space-between;">
         <span><strong>Order ID:</strong></span>
-        <span>${orderId || newKOTId}</span>
+        <span>${highlightedOrderId}</span>
       </div>
       <div style="display: flex; justify-content: space-between;">
         <span><strong>Cashier:</strong></span>
