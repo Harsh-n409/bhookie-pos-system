@@ -1209,6 +1209,13 @@ export default function KOTPanel({
             <tr>
               <td style="padding: 2px 0;">
                 ${item.name}
+                 ${
+                   item.baseItemName && item.customizationName
+                     ? `<div style="font-size: 10px; color: #555;">
+                ${item.baseItemName} with ${item.customizationName}
+               </div>`
+                     : ""
+                 }
                 ${
                   item.sauces?.length > 0
                     ? `<div style="font-size: 10px; color: #555;">(${item.sauces.join(
@@ -1235,7 +1242,9 @@ export default function KOTPanel({
     </div>
     <div style="display: flex; justify-content: space-between;">
       <span><strong>Discount:</strong></span>
-      <span>£${isEmployee ? creditsUsed.toFixed(2) : (subTotal - total).toFixed(2)}</span>
+      <span>£${
+        isEmployee ? creditsUsed.toFixed(2) : (subTotal - total).toFixed(2)
+      }</span>
     </div>
     <div style="display: flex; justify-content: space-between;">
       <span><strong>Total:</strong></span>
@@ -1381,6 +1390,12 @@ export default function KOTPanel({
                         {item.sauces.join(", ")}
                       </div>
                     )}
+                    {/* Show base item + customization separately if needed
+                    {item.baseItemName && item.customizationName && (
+                      <div className="text-sm text-gray-500">
+                        {item.baseItemName} with {item.customizationName}
+                      </div>
+                    )} */}
                   </td>
                   <td>
                     <div className="flex items-center gap-2">

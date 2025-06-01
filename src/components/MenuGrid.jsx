@@ -266,17 +266,20 @@ export default function MenuGrid({
     }
   };
 
-    const handleMealCustomization = (selectedOption) => {
+  const handleMealCustomization = (selectedOption) => {
     if (selectedMeal) {
       onAddItem({
         id: selectedMeal.id,
-        name: selectedMeal.itemName,
+        name: `${selectedMeal.itemName} : (${selectedOption.itemName})`, // Append customization
         price: selectedMeal.price,
         quantity: 1,
         customization: {
           category: selectedMeal.customizationCategory,
           selected: selectedOption.itemName,
         },
+        // Add base item details for reference
+        baseItemName: selectedMeal.itemName,
+        customizationName: selectedOption.itemName,
       });
     }
     setShowCustomizationPopup(false);
