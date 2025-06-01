@@ -418,11 +418,11 @@ export default function KOTPanel({
     // --- MODIFICATION END: handlePayClick logic refined ---
   };
 
-  const handleRefundQuantityChange = (index, value) => {
-    const updated = [...refundedItems];
-    updated[index].refundQuantity = Math.min(value, updated[index].quantity);
-    setRefundedItems(updated);
-  };
+  // const handleRefundQuantityChange = (index, value) => {
+  //   const updated = [...refundedItems];
+  //   updated[index].refundQuantity = Math.min(value, updated[index].quantity);
+  //   setRefundedItems(updated);
+  // };
 
   const processRefund = async () => {
     try {
@@ -676,62 +676,62 @@ export default function KOTPanel({
     }
   };
 
-  const performSearch = async (searchTerm) => {
-    if (!searchTerm) return [];
+  // const performSearch = async (searchTerm) => {
+  //   if (!searchTerm) return [];
 
-    try {
-      const customersRef = collection(db, "customers");
-      const empRef = collection(db, "users_01");
+  //   try {
+  //     const customersRef = collection(db, "customers");
+  //     const empRef = collection(db, "users_01");
 
-      const [customerPhoneSnap, customerIdSnap, empPhoneSnap, empIdSnap] =
-        await Promise.all([
-          getDocs(query(customersRef, where("phone", "==", searchTerm))),
-          getDocs(query(customersRef, where("customerID", "==", searchTerm))),
-          getDocs(query(empRef, where("phone", "==", searchTerm))),
-          getDocs(query(empRef, where("employeeID", "==", searchTerm))),
-        ]);
+  //     const [customerPhoneSnap, customerIdSnap, empPhoneSnap, empIdSnap] =
+  //       await Promise.all([
+  //         getDocs(query(customersRef, where("phone", "==", searchTerm))),
+  //         getDocs(query(customersRef, where("customerID", "==", searchTerm))),
+  //         getDocs(query(empRef, where("phone", "==", searchTerm))),
+  //         getDocs(query(empRef, where("employeeID", "==", searchTerm))),
+  //       ]);
 
-      const results = [];
+  //     const results = [];
 
-      // Process results
-      customerPhoneSnap.forEach((doc) =>
-        results.push({ ...doc.data(), isEmployee: false })
-      );
-      customerIdSnap.forEach((doc) =>
-        results.push({ ...doc.data(), isEmployee: false })
-      );
-      empPhoneSnap.forEach((doc) =>
-        results.push({ ...doc.data(), isEmployee: true, EmployeeID: doc.id })
-      );
-      empIdSnap.forEach((doc) =>
-        results.push({ ...doc.data(), isEmployee: true, EmployeeID: doc.id })
-      );
+  //     // Process results
+  //     customerPhoneSnap.forEach((doc) =>
+  //       results.push({ ...doc.data(), isEmployee: false })
+  //     );
+  //     customerIdSnap.forEach((doc) =>
+  //       results.push({ ...doc.data(), isEmployee: false })
+  //     );
+  //     empPhoneSnap.forEach((doc) =>
+  //       results.push({ ...doc.data(), isEmployee: true, EmployeeID: doc.id })
+  //     );
+  //     empIdSnap.forEach((doc) =>
+  //       results.push({ ...doc.data(), isEmployee: true, EmployeeID: doc.id })
+  //     );
 
-      // Deduplicate and check clock-in status
-      const uniqueResults = Array.from(
-        new Set(results.map((r) => r.phone || r.EmployeeID || r.customerID))
-      ).map((id) =>
-        results.find((r) => (r.phone || r.EmployeeID || r.customerID) === id)
-      );
+  //     // Deduplicate and check clock-in status
+  //     const uniqueResults = Array.from(
+  //       new Set(results.map((r) => r.phone || r.EmployeeID || r.customerID))
+  //     ).map((id) =>
+  //       results.find((r) => (r.phone || r.EmployeeID || r.customerID) === id)
+  //     );
 
-      const finalResults = await Promise.all(
-        uniqueResults.map(async (result) => {
-          if (result.isEmployee) {
-            const isClockedIn = await checkEmployeeClockInStatus(
-              result.EmployeeID
-            );
-            return { ...result, isClockedIn };
-          }
-          return result;
-        })
-      );
+  //     const finalResults = await Promise.all(
+  //       uniqueResults.map(async (result) => {
+  //         if (result.isEmployee) {
+  //           const isClockedIn = await checkEmployeeClockInStatus(
+  //             result.EmployeeID
+  //           );
+  //           return { ...result, isClockedIn };
+  //         }
+  //         return result;
+  //       })
+  //     );
 
-      setFoundCustomers(finalResults); // ✅ This should be the final state update
-    } catch (error) {
-      console.error("Search error:", error);
-      return [];
-    }
-  };
+  //     setFoundCustomers(finalResults); // ✅ This should be the final state update
+  //   } catch (error) {
+  //     console.error("Search error:", error);
+  //     return [];
+  //   }
+  // };
 
   const generateCustomerId = async () => {
     const customersQuery = query(
@@ -879,8 +879,8 @@ export default function KOTPanel({
       setCustomerId(customer.EmployeeID);
       setCustomerPhone(customer.phone); // Ensure phone is set for employee
       const isClockedIn = await checkEmployeeClockInStatus(customer.EmployeeID); // Use EmployeeID for check
-      if (isClockedIn) {
-        alert("Clocked-in employees cannot use meal credits!");
+      if (!isClockedIn) {
+        alert("Clocked-out employees cannot use meal credits!");
         return;
       }
 
@@ -914,20 +914,20 @@ export default function KOTPanel({
   };
   // --- MODIFICATION END: handleSelectCustomer logic refined ---
 
-  const generateNineDigitUserId = async () => {
-    const customersRef = collection(db, "customers");
-    let userId;
-    let exists = true;
+  // const generateNineDigitUserId = async () => {
+  //   const customersRef = collection(db, "customers");
+  //   let userId;
+  //   let exists = true;
 
-    while (exists) {
-      userId = Math.floor(100000000 + Math.random() * 900000000).toString();
-      const querySnapshot = await getDocs(
-        query(customersRef, where("userId", "==", userId))
-      );
-      exists = !querySnapshot.empty;
-    }
-    return userId;
-  };
+  //   while (exists) {
+  //     userId = Math.floor(100000000 + Math.random() * 900000000).toString();
+  //     const querySnapshot = await getDocs(
+  //       query(customersRef, where("userId", "==", userId))
+  //     );
+  //     exists = !querySnapshot.empty;
+  //   }
+  //   return userId;
+  // };
 
   // --- MODIFICATION START: createNewCustomer logic refined ---
   const createNewCustomer = async () => {

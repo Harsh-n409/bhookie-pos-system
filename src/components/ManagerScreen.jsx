@@ -72,7 +72,7 @@ export default function ManagerScreen() {
     };
   }, [logout]);
 
-  const handleOpenCashier = async (cashierId) => {
+  const handleOpenCashier = async () => {
     const trimmedCode = cashierCode.trim();
     if (!trimmedCode) {
       setCashierStatus("Please enter a valid employee ID.");
@@ -83,7 +83,7 @@ export default function ManagerScreen() {
     setCashierStatus("Authenticating...");
 
     try {
-      // 1. Query users_01 collection by employeeID
+      // 1. Query users collection
       const usersRef = collection(db, "users_01");
       const userQuery = query(usersRef, where("employeeID", "==", trimmedCode));
       const querySnapshot = await getDocs(userQuery);
@@ -97,32 +97,28 @@ export default function ManagerScreen() {
       const userData = userDoc.data();
 
       // 2. Check active status
-      const isActive = userData.active === true;
-      if (!isActive) {
+      if (userData.active !== true) {
         setCashierStatus("User is inactive.");
         return;
       }
 
       // 3. Validate role
       const role = userData.role;
-      console.log(role);
       if (!role || !roleMap[role]) {
         setCashierStatus("User role not recognized.");
         return;
       }
 
-      // 4. Check existing sign-in
+      // 4. Check existing session using isSignedIn
       const attendanceRefCheck = query(
         collection(db, "cashierAttendance"),
         where("cashierId", "==", trimmedCode),
-        where("isOpen", "==", true)
+        where("isSignedIn", "==", true)
       );
       const attendanceSnapCheck = await getDocs(attendanceRefCheck);
 
       if (!attendanceSnapCheck.empty) {
-        setCashierStatus("Cashier is already open.");
-        setCashierCode("");
-        setCashierLoading(false);
+        setCashierStatus("Cashier is already opened.");
         return;
       }
 
@@ -148,8 +144,8 @@ export default function ManagerScreen() {
         await setDoc(newAttendanceRef, {
           cashierId: trimmedCode,
           cashierName: userData.name || "Unnamed Cashier",
-          isSignedIn: false,
-          isOpen: true,
+          isSignedIn: true, // Now signed in for shift
+          isOpen: false, // Till not open yet
           openTimes: [],
           closeTimes: [],
           signInTime: serverTimestamp(),
@@ -157,8 +153,8 @@ export default function ManagerScreen() {
       } else {
         const existingDoc = attendanceSnap.docs[0];
         await updateDoc(doc(db, "cashierAttendance", existingDoc.id), {
-          isSignedIn: false,
-          isOpen: true,
+          isSignedIn: true,
+          isOpen: false,
           signInTime: serverTimestamp(),
         });
       }
@@ -169,20 +165,20 @@ export default function ManagerScreen() {
         ...userData,
         role: role,
       });
-      setCashierId(trimmedCode);
-      setCashierStatus(`Cashier ${userData.name} opened successfully.`);
+      setCashierId(trimmedCode); // Set active cashier
+      setCashierStatus(`Cashier ${userData.name} Opened successfully.`);
       setCashierCode("");
     } catch (error) {
       console.error("Open Cashier error:", error);
-      setCashierStatus("Something went wrong while Opening Cashier.");
+      setCashierStatus("Failed to Open cashier.");
     } finally {
       setCashierLoading(false);
     }
   };
 
-  const handleCloseCashier = async (cashierId) => {
+  // Close Cashier (end shift)
+  const handleCloseCashier = async () => {
     const trimmedCode = cashierCode.trim();
-
     if (!trimmedCode) {
       setCashierStatus("Please enter Cashier ID.");
       return;
@@ -192,7 +188,7 @@ export default function ManagerScreen() {
     setCashierLoading(true);
 
     try {
-      // 1. Find active sessionHistory (logoutTime == null)
+      // 1. Find active session
       const sessionQuery = query(
         collection(db, "sessionHistory"),
         where("userId", "==", trimmedCode),
@@ -201,13 +197,13 @@ export default function ManagerScreen() {
       const sessionSnap = await getDocs(sessionQuery);
 
       if (sessionSnap.empty) {
-        setCashierStatus("No active session found for this cashier.");
+        setCashierStatus("No active session found.");
         return;
       }
 
       const sessionRef = doc(db, "sessionHistory", sessionSnap.docs[0].id);
 
-      // 2. Find active cashierAttendance
+      // 2. Find cashier attendance
       const attQuery = query(
         collection(db, "cashierAttendance"),
         where("cashierId", "==", trimmedCode),
@@ -216,7 +212,7 @@ export default function ManagerScreen() {
       const attSnap = await getDocs(attQuery);
 
       if (attSnap.empty) {
-        setCashierStatus("Cashier is already closed.");
+        setCashierStatus("Cashier is not Open.");
         return;
       }
 
@@ -224,7 +220,7 @@ export default function ManagerScreen() {
       const attRef = doc(db, "cashierAttendance", attDoc.id);
       const data = attDoc.data();
 
-      // 3. If till is still open, close it
+      // 3. Close till if open
       if (data.isOpen) {
         await updateDoc(attRef, {
           isOpen: false,
@@ -237,12 +233,12 @@ export default function ManagerScreen() {
         isSignedIn: false,
       });
 
-      // 5. Update sessionHistory with logout time
+      // 5. Update session history
       await updateDoc(sessionRef, {
         logoutTime: serverTimestamp(),
       });
 
-      // ✅ 6. Close any open cash session for this cashier
+      // 6. Close any open cash sessions
       const cashSessionQuery = query(
         collection(db, "cashSessions"),
         where("cashierId", "==", trimmedCode),
@@ -258,32 +254,41 @@ export default function ManagerScreen() {
           closedAt: Timestamp.now(),
           closedBy: trimmedCode,
         });
-        console.log("Cash session closed.");
-      } else {
-        console.log("No active cash session to close.");
       }
 
-      setCashierStatus("Cashier closed successfully.");
-      setCashierCode(""); // Clear input
+      // Clear active cashier if closing current session
+      if (cashierId === trimmedCode) {
+        setCashierId("");
+      }
+
+      setCashierStatus("Cashier Closed successfully.");
+      setCashierCode("");
     } catch (error) {
-      console.error("closing Out error:", error);
-      setCashierStatus("An error occurred during closing cashier.");
+      console.error("Closing error:", error);
+      setCashierStatus("Failed to Close cashier.");
     } finally {
       setCashierLoading(false);
     }
   };
 
+  // Sign In Cashier (open till)
   const handleSignInCashier = async () => {
+    if (!cashierId) {
+      alert("No active cashier session.");
+      return;
+    }
+
     try {
-      // 1. Verify signed-in cashier
+      // 1. Verify active cashier session
       const q = query(
         collection(db, "cashierAttendance"),
         where("cashierId", "==", cashierId),
         where("isSignedIn", "==", true)
       );
       const snapshot = await getDocs(q);
+
       if (snapshot.empty) {
-        alert("Cashier is not open. Cannot sign in cashier.");
+        alert("Cashier is not Opened.");
         return;
       }
 
@@ -297,13 +302,13 @@ export default function ManagerScreen() {
         return;
       }
 
-      // 3. Update cashierAttendance to open
+      // 3. Update to open till
       await updateDoc(attendanceRef, {
         isOpen: true,
         openTimes: arrayUnion(Timestamp.now()),
       });
 
-      // 4. Find the cashier's active (unclosed) cash session
+      // 4. Handle cash sessions
       const csQ = query(
         collection(db, "cashSessions"),
         where("cashierId", "==", cashierId),
@@ -314,33 +319,35 @@ export default function ManagerScreen() {
       if (!csSnap.empty) {
         const csDoc = csSnap.docs[0];
         const csRef = doc(db, "cashSessions", csDoc.id);
-
-        // Resume session by unpausing it
         await updateDoc(csRef, { isPaused: false });
-
-        console.log("Cash session unpaused.");
-      } else {
-        console.log("No open cash session found to resume.");
       }
 
-      alert("Cashier opened successfully.");
+      alert("Till opened successfully.");
     } catch (error) {
-      console.error("Sign In Cashier error:", error);
-      alert("Failed to Sign In cashier.");
+      console.error("Sign In error:", error);
+      alert("Failed to Sign In Cashier.");
     }
   };
 
+  // Sign Out Cashier (close till)
   const handleSignOutCashier = async () => {
+    console.log("id :", cashierCode);
+    if (!cashierId) {
+      alert("No active cashier session.");
+      return;
+    }
+
     try {
-      // 1. Verify that the cashier is signed in
+      // 1. Verify active session
       const q = query(
         collection(db, "cashierAttendance"),
         where("cashierId", "==", cashierId),
         where("isSignedIn", "==", true)
       );
       const snapshot = await getDocs(q);
+
       if (snapshot.empty) {
-        alert("Cashier is not open. Cannot Sign Out cashier.");
+        alert("Cashier is not Opened.");
         return;
       }
 
@@ -354,13 +361,13 @@ export default function ManagerScreen() {
         return;
       }
 
-      // 3. Close cashierAttendance
+      // 3. Close till
       await updateDoc(attendanceRef, {
         isOpen: false,
         closeTimes: arrayUnion(Timestamp.now()),
       });
 
-      // 4. Pause the cashier's active cash session
+      // 4. Pause cash session
       const csQ = query(
         collection(db, "cashSessions"),
         where("cashierId", "==", cashierId),
@@ -371,17 +378,13 @@ export default function ManagerScreen() {
       if (!csSnap.empty) {
         const csDoc = csSnap.docs[0];
         const csRef = doc(db, "cashSessions", csDoc.id);
-
         await updateDoc(csRef, { isPaused: true });
-        console.log("Cash session paused.");
-      } else {
-        console.log("No open cash session found to pause.");
       }
 
       alert("Cashier Signed Out successfully.");
     } catch (error) {
-      console.error("Sign Out Cashier error:", error);
-      alert("Failed to Signed Out cashier.");
+      console.error("Sign Out error:", error);
+      alert("Failed to Sign Out Cashier.");
     }
   };
 
@@ -432,24 +435,24 @@ export default function ManagerScreen() {
     }
   };
 
-  const handleRefund = async (orderId, itemId, refundAmount) => {
-    const kotRef = doc(db, "KOT", orderId);
-    const kotSnap = await getDoc(kotRef);
-    if (!kotSnap.exists()) return;
+  // const handleRefund = async (orderId, itemId, refundAmount) => {
+  //   const kotRef = doc(db, "KOT", orderId);
+  //   const kotSnap = await getDoc(kotRef);
+  //   if (!kotSnap.exists()) return;
 
-    const data = kotSnap.data();
-    const updatedItems = data.items.filter((item) => item.id !== itemId);
-    const newAmount = data.amount - refundAmount;
+  //   const data = kotSnap.data();
+  //   const updatedItems = data.items.filter((item) => item.id !== itemId);
+  //   const newAmount = data.amount - refundAmount;
 
-    if (updatedItems.length === 0) {
-      await deleteDoc(kotRef);
-    } else {
-      await updateDoc(kotRef, { items: updatedItems, amount: newAmount });
-    }
+  //   if (updatedItems.length === 0) {
+  //     await deleteDoc(kotRef);
+  //   } else {
+  //     await updateDoc(kotRef, { items: updatedItems, amount: newAmount });
+  //   }
 
-    setSelectedItemInfo(null);
-    fetchOrders();
-  };
+  //   setSelectedItemInfo(null);
+  //   fetchOrders();
+  // };
 
   // const handleVoid = async (orderId) => {
   //   await deleteDoc(doc(db, "KOT", orderId));
@@ -943,7 +946,7 @@ export default function ManagerScreen() {
                           <td className="p-2 border">
                             {order.customerID || "N/A"}
                           </td>
-          
+
                           <td className="p-2 border">
                             {order.user_id || "N/A"}
                           </td>
@@ -1065,21 +1068,31 @@ export default function ManagerScreen() {
                   {employees.map((employee) => (
                     <tr
                       key={employee.id}
-                      className="border-b hover:bg-gray-100 cursor-pointer"
+                      className={`border-b hover:bg-gray-100 ${
+                        employee.isClockedIn
+                          ? "cursor-pointer"
+                          : "cursor-not-allowed"
+                      }`}
                       onClick={() => {
-                        logout(); // Call your logout function first
-                        navigate("/", {
-                          state: {
-                            selectedEmployee: {
-                              id: employee.phone,
-                              name: employee.name,
-                              EmployeeID: employee.employeeID,
-                              phone: employee.phone,
-                              mealCredits: employee.meal.mealCredits,
-                              isClockedIn: employee.isClockedIn,
+                        if (employee.isClockedIn) {
+                          logout();
+                          navigate("/", {
+                            state: {
+                              selectedEmployee: {
+                                id: employee.phone,
+                                name: employee.name,
+                                EmployeeID: employee.employeeID,
+                                phone: employee.phone,
+                                mealCredits: employee.meal.mealCredits,
+                                isClockedIn: employee.isClockedIn,
+                              },
                             },
-                          },
-                        });
+                          });
+                        } else {
+                          alert(
+                            "Employee must be Clocked-In to use Meal Credits."
+                          );
+                        }
                       }}
                     >
                       <td className="p-2">{employee.name}</td>
@@ -1139,43 +1152,36 @@ export default function ManagerScreen() {
             )}
 
             <div className="flex flex-wrap gap-4">
-              {/* Open Cashier */}
               <button
-                onClick={() => handleOpenCashier(cashierCode)}
+                onClick={handleOpenCashier}
                 className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-900"
-                disabled={!cashierCode}
+                disabled={!cashierCode || cashierLoading}
               >
-                Open Cashier
+                {cashierLoading ? "Processing..." : "Start Shift"}
               </button>
 
-              {/* Sign In */}
               <button
                 onClick={handleSignInCashier}
-                disabled={!cashierCode || cashierLoading}
-                className={`bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-900 ${
-                  cashierLoading ? "opacity-50 cursor-not-allowed" : ""
-                }`}
+                disabled={!cashierId || cashierLoading}
+                className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
               >
-                {cashierLoading ? "Signing In..." : "Sign In Cashier"}
+                Open Till
               </button>
 
-
-              {/* Sign Out */}
               <button
                 onClick={handleSignOutCashier}
-                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
-                disabled={!cashierCode}
+                disabled={!cashierId || cashierLoading}
+                className="bg-yellow-600 text-white px-4 py-2 rounded hover:bg-yellow-700"
               >
-                Sign Out Cashier
+                Close Till
               </button>
 
-               {/* Close Cashier */}
               <button
-                onClick={() => handleCloseCashier(cashierCode)}
-                className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-900"
-                disabled={!cashierCode}
+                onClick={handleCloseCashier}
+                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+                disabled={!cashierCode || cashierLoading}
               >
-                Close Cashier
+                End Shift
               </button>
             </div>
           </div>
