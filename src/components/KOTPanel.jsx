@@ -1209,13 +1209,6 @@ export default function KOTPanel({
             <tr>
               <td style="padding: 2px 0;">
                 ${item.name}
-                 ${
-                   item.baseItemName && item.customizationName
-                     ? `<div style="font-size: 10px; color: #555;">
-                ${item.baseItemName} with ${item.customizationName}
-               </div>`
-                     : ""
-                 }
                 ${
                   item.sauces?.length > 0
                     ? `<div style="font-size: 10px; color: #555;">(${item.sauces.join(

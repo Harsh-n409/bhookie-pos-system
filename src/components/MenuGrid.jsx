@@ -31,6 +31,7 @@ export default function MenuGrid({
   const [selectedItem, setSelectedItem] = useState(null);
   const [showOffers, setShowOffers] = useState(true);
   const [offers, setOffers] = useState([]);
+   const [mealBreakdowns, setMealBreakdowns] = useState({});
 
   // Clickable items - lowercased for comparison
   const clickableItems = [
@@ -177,6 +178,27 @@ export default function MenuGrid({
           // Return cleanup function for the effect
           return () => unsubscribe();
         });
+
+        const newMealBreakdowns = {};
+        itemData.forEach(item => {
+          if (item.itemName.toLowerCase().includes("meal")) {
+            const components = item.itemName
+              .split('(')[1] // Get content inside parentheses
+              ?.split(')')[0]
+              ?.split('+')
+              .map(comp => comp.trim().toLowerCase());
+            
+            if (components) {
+              newMealBreakdowns[item.id] = {
+                components: components.filter(comp => !comp.includes("any")),
+                hasCustomization: components.some(comp => comp.includes("any")),
+                basePrice: item.price
+              };
+            }
+          }
+        });
+        setMealBreakdowns(newMealBreakdowns);
+        
       } catch (err) {
         setError("Error loading menu data");
         console.error("Error loading menu data:", err);
