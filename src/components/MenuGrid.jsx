@@ -33,7 +33,6 @@ export default function MenuGrid({
   const [selectedItem, setSelectedItem] = useState(null);
   const [showOffers, setShowOffers] = useState(true);
   const [offers, setOffers] = useState([]);
-   const [mealBreakdowns, setMealBreakdowns] = useState({});
 
   useEffect(() => {
   console.log("Current inventory:", inventory);
@@ -197,27 +196,6 @@ const ELIGIBLE_MEAL_KEYWORDS = [
           // Return cleanup function for the effect
           return () => unsubscribe();
         });
-
-        const newMealBreakdowns = {};
-        itemData.forEach(item => {
-          if (item.itemName.toLowerCase().includes("meal")) {
-            const components = item.itemName
-              .split('(')[1] // Get content inside parentheses
-              ?.split(')')[0]
-              ?.split('+')
-              .map(comp => comp.trim().toLowerCase());
-            
-            if (components) {
-              newMealBreakdowns[item.id] = {
-                components: components.filter(comp => !comp.includes("any")),
-                hasCustomization: components.some(comp => comp.includes("any")),
-                basePrice: item.price
-              };
-            }
-          }
-        });
-        setMealBreakdowns(newMealBreakdowns);
-        
       } catch (err) {
         setError("Error loading menu data");
         console.error("Error loading menu data:", err);
@@ -258,31 +236,7 @@ const handleItemClick = async (item) => {
       return;
     }
 
-<<<<<<< Updated upstream
-  const handleMealCustomization = (selectedOption) => {
-    if (selectedMeal) {
-      onAddItem({
-        id: selectedMeal.id,
-        name: `${selectedMeal.itemName} : (${selectedOption.itemName})`, // Append customization
-        price: selectedMeal.price,
-        quantity: 1,
-        customization: {
-          category: selectedMeal.customizationCategory,
-          selected: selectedOption.itemName,
-        },
-        // Add base item details for reference
-        baseItemName: selectedMeal.itemName,
-        customizationName: selectedOption.itemName,
-      });
-    }
-    setShowCustomizationPopup(false);
-    setSelectedMeal(null);
-  };
-
-  const handleAddUpgrade = (upgrade) => {
-=======
     // Always add base item first
->>>>>>> Stashed changes
     onAddItem({
       id: item.id,
       name: item.itemName,
