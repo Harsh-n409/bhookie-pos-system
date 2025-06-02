@@ -10,6 +10,8 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase/config";
 
+
+
 export default function MenuGrid({
   onAddItem = () => {},
   onApplyOffer = () => {},
@@ -33,6 +35,10 @@ export default function MenuGrid({
   const [offers, setOffers] = useState([]);
    const [mealBreakdowns, setMealBreakdowns] = useState({});
 
+  useEffect(() => {
+  console.log("Current inventory:", inventory);
+}, [inventory]);
+
   // Clickable items - lowercased for comparison
   const clickableItems = [
     "chicken drumsticks",
@@ -44,6 +50,19 @@ export default function MenuGrid({
     "chicken spicy burger + chicken drumstick",
   ];
 
+  const ELIGIBLE_BASE_ITEMS = [
+  "Classic Fries (Regular)",
+  "Cheesy Fries (Regular)",
+  "Noodle Bhel (Regular)", 
+  "Signature Fries"
+];
+
+const ELIGIBLE_MEAL_KEYWORDS = [
+  "Classic Fries",
+  "Cheesy Fries",
+  "Noodle Bhel",
+  "Signature Fries"
+];
   // Sample offers data
   // const offers = [
   //   {
@@ -216,78 +235,30 @@ export default function MenuGrid({
     console.log("FILTERED ITEMS:", filteredItems);
   }, [filteredItems]);
 
-  const handleItemClick = async (item) => {
-    setSelectedItem(item);
-    try {
-      if (item.requiresCustomization) {
-        try {
-          const customizationCategoryRef = doc(
-            db,
-            "category",
-            item.customizationCategory
-          ); // Assuming item.customizationCategory is like "cat01"
 
-          console.log("category =", customizationCategoryRef.path); // This should now print
-
-          // ✅ Step 2: Query using DocumentReference
-          const categoryQuery = query(
-            collection(db, "items"),
-            where("categoryId", "==", customizationCategoryRef),
-            where("active", "==", true)
-          );
-
-          const querySnapshot = await getDocs(categoryQuery);
-          const options = querySnapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-          }));
-
-          setCustomizationOptions(options);
-          setSelectedMeal(item);
-          setShowCustomizationPopup(true);
-        } catch (err) {
-          console.error("Error fetching customization options:", err);
-        }
-      } else {
-        // First add the base item
-        onAddItem({
-          id: item.id,
-          name: item.itemName,
-          price: item.price,
-          quantity: 1,
-        });
-
-        // Check for available upgrades
-        const q = query(
-          collection(db, "items"),
-          where("categoryId", "==", "upgrades"),
-          where("parentCategory", "==", "meals")
-        );
-
-        const querySnapshot = await getDocs(q);
-        const upgrades = querySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-          stock: inventory[doc.id]?.totalStockOnHand || 0,
-        }));
-
-        if (upgrades.length > 0) {
-          setSelectedForUpgrade(item);
-          setUpgradeOptions(upgrades);
-          setShowUpgradePopup(true);
-        }
-      }
-    } catch (err) {
-      console.error("Error fetching sauces:", err);
-      onAddItem({
-        id: item.id,
-        name: item.itemName,
-        price: item.price,
-        quantity: 1,
-      });
+const handleItemClick = async (item) => {
+  setSelectedItem(item);
+  try {
+    if (item.requiresCustomization) {
+      // [Keep existing customization logic unchanged]
+      const customizationCategoryRef = doc(db, "category", item.customizationCategory);
+      const categoryQuery = query(
+        collection(db, "items"),
+        where("categoryId", "==", customizationCategoryRef),
+        where("active", "==", true)
+      );
+      const querySnapshot = await getDocs(categoryQuery);
+      const options = querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setCustomizationOptions(options);
+      setSelectedMeal(item);
+      setShowCustomizationPopup(true);
+      return;
     }
-  };
 
+<<<<<<< Updated upstream
   const handleMealCustomization = (selectedOption) => {
     if (selectedMeal) {
       onAddItem({
@@ -309,16 +280,126 @@ export default function MenuGrid({
   };
 
   const handleAddUpgrade = (upgrade) => {
+=======
+    // Always add base item first
+>>>>>>> Stashed changes
     onAddItem({
-      id: upgrade.id,
-      name: upgrade.itemName,
-      price: upgrade.price,
+      id: item.id,
+      name: item.itemName,
+      price: item.price,
       quantity: 1,
-      parentItem: selectedForUpgrade.id,
-      isUpgrade: true,
     });
-    setShowUpgradePopup(false);
-  };
+
+    // 1. HARD STOP for Large items
+    if (item.itemName.toLowerCase().includes("large")) return;
+
+    // 2. Check upgrade eligibility
+    const isBaseEligible = ELIGIBLE_BASE_ITEMS.includes(item.itemName.trim());
+    const isMeal = item.categoryId === "meals"; // Typo fixed from "meals" to match your DB
+    
+    if (isBaseEligible || isMeal) {
+      const upgrades = await getUpgradeOptions(isMeal);
+      if (upgrades.length > 0) {
+        setSelectedForUpgrade(item);
+        setUpgradeOptions(upgrades);
+        setShowUpgradePopup(true);
+      }
+    }
+  } catch (err) {
+    console.error("Error handling item click:", err);
+    // Fallback to basic add
+    onAddItem({ id: item.id, name: item.itemName, price: item.price, quantity: 1 });
+  }
+};
+
+// Helper function for upgrade pricing
+const getUpgradeOptions = async (isMeal) => {
+  const q = query(
+    collection(db, "items"),
+    where("categoryId", "==", "upgrades"),
+    where("parentCategory", "==", "meals")
+  );
+  const snapshot = await getDocs(q);
+  
+  return snapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data(),
+    price: isMeal ? doc.data().price : 1.00, // £0.69 for meals, £1.00 for others
+    stock: inventory[doc.id]?.totalStockOnHand || 0
+  }));
+};
+
+    const handleMealCustomization = async (selectedOption) => {
+  if (selectedMeal) {
+    // Add the customized meal
+    onAddItem({
+      id: selectedMeal.id,
+      name: selectedMeal.itemName,
+      price: selectedMeal.price,
+      quantity: 1,
+      customization: {
+        category: selectedMeal.customizationCategory,
+        selected: selectedOption.itemName,
+      },
+    });
+
+    // Check if meal contains eligible fries
+    const hasEligibleFries = ELIGIBLE_MEAL_KEYWORDS.some(
+      keyword => selectedMeal.itemName.includes(keyword)
+    );
+
+    if (hasEligibleFries) {
+      const q = query(
+        collection(db, "items"),
+        where("categoryId", "==", "upgrades"),
+        where("parentCategory", "==", "meals")
+      );
+      const querySnapshot = await getDocs(q);
+      const upgrades = querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        stock: inventory[doc.id]?.totalStockOnHand || 0,
+      }));
+      
+      if (upgrades.length > 0) {
+        setSelectedForUpgrade(selectedMeal);
+        setUpgradeOptions(upgrades);
+        setShowUpgradePopup(true);
+      }
+    }
+  }
+  setShowCustomizationPopup(false);
+  setSelectedMeal(null);
+};
+// In handleAddUpgrade (MenuGrid.jsx)
+const handleAddUpgrade = (upgrade) => {
+  if (!selectedForUpgrade) {
+    console.error("No base item selected for upgrade.");
+    return;
+  }
+
+  const baseId = upgrade.id; // like "upgrade1"
+  const parentId = selectedForUpgrade.id;
+
+  // Locally unique ID for KOT list, but still tied to base upgrade
+  const kotItemId = `${baseId}__${parentId}`; // safe separator
+
+  onAddItem({
+    id: kotItemId, // unique for KOT tracking
+    name: upgrade.itemName,
+    price: upgrade.price,
+    quantity: 1,
+    isUpgrade: true,
+    parentItem: parentId,
+    itemName: upgrade.itemName || "Upgrade",
+    originalUpgradeId: baseId, // important for inventory check
+  });
+
+  setSelectedForUpgrade(null);
+  setShowUpgradePopup(false);
+};
+
+
   const handleSelectSauce = (sauce) => {
     if (selectedItem) {
       onAddItem({

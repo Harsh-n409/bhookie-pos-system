@@ -69,16 +69,20 @@ export default function Header() {
   
       <div className="flex gap-4 sm:gap-6 md:gap-9 items-center text-gray-300 text-sm sm:text-base">
         {cashierName && (
-  <div className="text-white flex flex-col items-end text-sm sm:text-base">
-    <span className="text-lg font-semibold flex items-center gap-1">
-      <span role="img" aria-label="waving hand">👋</span> Hi {cashierName}!
-    </span>
-    <div className="text-gray-300 leading-tight text-[10px] mt-0">
+  <div className="text-white flex flex-row items-center gap-4 text-sm sm:text-base">
+  {/* Greeting */}
+  <span className="text-lg font-semibold flex items-center gap-1">
+    <span role="img" aria-label="waving hand">👋</span> Hi {cashierName}!
+  </span>
 
-      <div>{formattedDate}</div>
-      <div>{formattedTime}</div>
-    </div>
+  {/* Date & Time */}
+  <div className="text-gray-300 text-sm sm:text-base font-medium flex gap-2">
+
+    <span>{formattedDate}</span>
+    <span>{formattedTime}</span>
   </div>
+</div>
+
 )}
 
       </div>
