@@ -969,7 +969,7 @@ export default function ManagerScreen() {
                           </td>
                           <td className="p-2 border">
                             <div className="flex gap-2 justify-center">
-                              <button
+                              {/* <button
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   if (order.refunded) return;
@@ -988,7 +988,7 @@ export default function ManagerScreen() {
                                 disabled={order.refunded}
                               >
                                 {order.refunded ? "Refunded" : "Refund"}
-                              </button>
+                              </button> */}
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();

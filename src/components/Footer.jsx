@@ -21,6 +21,9 @@ export default function Footer() {
   const handleRecallClick = () => {
     navigate("/recall-orders");
   };
+  const handleRefundClick = () => {
+    navigate("/refund-orders");
+  };
 
   return (
       <div className="flex flex-wrap justify-start gap-1">
@@ -55,6 +58,11 @@ export default function Footer() {
           className="bg-blue-600 text-white font-bold py-2 px-2 rounded shadow text-sm w-[120px] h-[80px]"
         >
           REPORT
+        </button>
+        <button onClick={handleRefundClick}
+          className="bg-orange-600 text-white font-bold py-2 px-2 rounded shadow text-sm w-[120px] h-[80px]"
+        >
+          REFUND
         </button>
       </div>
     

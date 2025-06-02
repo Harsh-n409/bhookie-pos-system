@@ -8,6 +8,7 @@ import PaymentScreen from "./components/PaymentScreen.jsx";
 import Report from "./components/Report.jsx";
 import Help from "./components/Help.jsx"
 import RecallPage from "./components/RecallPage.jsx";
+import RefundPage from "./components/RefundPage.jsx";
 
 export default function App() {
   return (
@@ -22,7 +23,8 @@ export default function App() {
           <Route path="/manager" element={<ManagerScreen />} />
           <Route path="/PaymentScreen" element={<PaymentScreen />} />         
           <Route path="/Report" element={<Report />} />
-          <Route path="/recall-orders" element={<RecallPage/>}/>s
+          <Route path="/recall-orders" element={<RecallPage/>}/>
+          <Route path="/refund-orders" element={<RefundPage/>}/>
         </Routes>
       </AuthProvider>
     </Router>

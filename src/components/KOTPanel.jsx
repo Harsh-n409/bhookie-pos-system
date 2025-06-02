@@ -67,22 +67,22 @@ export default function KOTPanel({
     }
   }, [isPaymentProcessed]);
 
-  useEffect(() => {
-    if (location.state?.refundOrder) {
-      const order = location.state.refundOrder;
-      // ...existing recall logic...
-      setIsRefundMode(true);
-      setOriginalOrder(order);
-      setRefundedItems(
-        order.items.map((item) => ({
-          ...item,
-          // Calculate remaining refundable quantity
-          remainingQuantity: item.quantity - (item.refundedQuantity || 0),
-          refundQuantity: 0, // Start with 0 for this refund session
-        }))
-      );
-    }
-  }, [location.state]);
+  // useEffect(() => {
+  //   if (location.state?.refundOrder) {
+  //     const order = location.state.refundOrder;
+  //     // ...existing recall logic...
+  //     setIsRefundMode(true);
+  //     setOriginalOrder(order);
+  //     setRefundedItems(
+  //       order.items.map((item) => ({
+  //         ...item,
+  //         // Calculate remaining refundable quantity
+  //         remainingQuantity: item.quantity - (item.refundedQuantity || 0),
+  //         refundQuantity: 0, // Start with 0 for this refund session
+  //       }))
+  //     );
+  //   }
+  // }, [location.state]);
 
   // Add this useEffect in KOTPanel component
   useEffect(() => {
@@ -424,176 +424,176 @@ export default function KOTPanel({
   //   setRefundedItems(updated);
   // };
 
-  const processRefund = async () => {
-    try {
-      // Validate refund quantities
-      const hasRefund = refundedItems.some((item) => item.refundQuantity > 0);
-      if (!hasRefund) {
-        alert("Please select items to refund");
-        return;
-      }
+  // const processRefund = async () => {
+  //   try {
+  //     // Validate refund quantities
+  //     const hasRefund = refundedItems.some((item) => item.refundQuantity > 0);
+  //     if (!hasRefund) {
+  //       alert("Please select items to refund");
+  //       return;
+  //     }
 
-      // Create refund transaction
-      const refundData = {
-        originalOrderId: originalOrder.id,
-        date: Timestamp.now(),
-        items: refundedItems.filter((item) => item.refundQuantity > 0),
-        refundAmount: refundedItems.reduce(
-          (sum, item) => sum + item.price * item.refundQuantity,
-          0
-        ),
-        processedBy: originalOrder.cashierName,
-      };
+  //     // Create refund transaction
+  //     const refundData = {
+  //       originalOrderId: originalOrder.id,
+  //       date: Timestamp.now(),
+  //       items: refundedItems.filter((item) => item.refundQuantity > 0),
+  //       refundAmount: refundedItems.reduce(
+  //         (sum, item) => sum + item.price * item.refundQuantity,
+  //         0
+  //       ),
+  //       processedBy: originalOrder.cashierName,
+  //     };
 
-      // Update KOT document first
-      const kotRef = doc(db, "KOT", originalOrder.id);
-      await runTransaction(db, async (transaction) => {
-        const kotDoc = await transaction.get(kotRef);
-        if (!kotDoc.exists()) {
-          throw new Error("Original order not found");
-        }
+  //     // Update KOT document first
+  //     const kotRef = doc(db, "KOT", originalOrder.id);
+  //     await runTransaction(db, async (transaction) => {
+  //       const kotDoc = await transaction.get(kotRef);
+  //       if (!kotDoc.exists()) {
+  //         throw new Error("Original order not found");
+  //       }
 
-        const kotData = kotDoc.data();
-        const updatedItems = [...kotData.items];
-        let totalRefundedAmount = 0;
-        let isFullyRefunded = true;
+  //       const kotData = kotDoc.data();
+  //       const updatedItems = [...kotData.items];
+  //       let totalRefundedAmount = 0;
+  //       let isFullyRefunded = true;
 
-        // Update items with refund quantities
-        refundedItems.forEach((refundItem) => {
-          if (refundItem.refundQuantity > 0) {
-            const originalItemIndex = updatedItems.findIndex(
-              (item) => item.id === refundItem.id
-            );
+  //       // Update items with refund quantities
+  //       refundedItems.forEach((refundItem) => {
+  //         if (refundItem.refundQuantity > 0) {
+  //           const originalItemIndex = updatedItems.findIndex(
+  //             (item) => item.id === refundItem.id
+  //           );
 
-            if (originalItemIndex !== -1) {
-              // Calculate new refunded quantity (previous + current)
-              const newRefundedQuantity =
-                (updatedItems[originalItemIndex].refundedQuantity || 0) +
-                refundItem.refundQuantity;
+  //           if (originalItemIndex !== -1) {
+  //             // Calculate new refunded quantity (previous + current)
+  //             const newRefundedQuantity =
+  //               (updatedItems[originalItemIndex].refundedQuantity || 0) +
+  //               refundItem.refundQuantity;
 
-              // Update refund quantities
-              updatedItems[originalItemIndex].refundedQuantity =
-                newRefundedQuantity;
+  //             // Update refund quantities
+  //             updatedItems[originalItemIndex].refundedQuantity =
+  //               newRefundedQuantity;
 
-              // Check if fully refunded
-              updatedItems[originalItemIndex].refunded =
-                newRefundedQuantity ===
-                updatedItems[originalItemIndex].quantity;
+  //             // Check if fully refunded
+  //             updatedItems[originalItemIndex].refunded =
+  //               newRefundedQuantity ===
+  //               updatedItems[originalItemIndex].quantity;
 
-              // Calculate refund amount
-              const itemRefundAmount =
-                refundItem.price * refundItem.refundQuantity;
-              totalRefundedAmount += itemRefundAmount;
-            }
-          }
-        });
+  //             // Calculate refund amount
+  //             const itemRefundAmount =
+  //               refundItem.price * refundItem.refundQuantity;
+  //             totalRefundedAmount += itemRefundAmount;
+  //           }
+  //         }
+  //       });
 
-        isFullyRefunded = updatedItems.every(
-          (item) => item.refundedQuantity === item.quantity
-        );
+  //       isFullyRefunded = updatedItems.every(
+  //         (item) => item.refundedQuantity === item.quantity
+  //       );
 
-        transaction.update(kotRef, {
-          items: updatedItems,
-          refunded: isFullyRefunded,
-          refundedAmount: (kotData.refundedAmount || 0) + totalRefundedAmount,
-        });
-      });
+  //       transaction.update(kotRef, {
+  //         items: updatedItems,
+  //         refunded: isFullyRefunded,
+  //         refundedAmount: (kotData.refundedAmount || 0) + totalRefundedAmount,
+  //       });
+  //     });
 
-      // Update inventory
-      for (const item of refundedItems) {
-        if (item.refundQuantity > 0) {
-          const itemRef = doc(db, "inventory", item.id);
-          await updateDoc(itemRef, {
-            totalStockOnHand: increment(item.refundQuantity),
-          });
-        }
-      }
+  //     // Update inventory
+  //     for (const item of refundedItems) {
+  //       if (item.refundQuantity > 0) {
+  //         const itemRef = doc(db, "inventory", item.id);
+  //         await updateDoc(itemRef, {
+  //           totalStockOnHand: increment(item.refundQuantity),
+  //         });
+  //       }
+  //     }
 
-      // Reverse loyalty points - FETCH CUSTOMER DOC BY ID
-      if (originalOrder.customerID && !originalOrder.isEmployee) {
-        // Query customer by customerID
-        const customerQuery = query(
-          collection(db, "customers"),
-          where("customerID", "==", originalOrder.customerID)
-        );
-        const customerSnapshot = await getDocs(customerQuery);
+  //     // Reverse loyalty points - FETCH CUSTOMER DOC BY ID
+  //     if (originalOrder.customerID && !originalOrder.isEmployee) {
+  //       // Query customer by customerID
+  //       const customerQuery = query(
+  //         collection(db, "customers"),
+  //         where("customerID", "==", originalOrder.customerID)
+  //       );
+  //       const customerSnapshot = await getDocs(customerQuery);
 
-        if (!customerSnapshot.empty) {
-          const customerDoc = customerSnapshot.docs[0];
-          const customerRef = doc(db, "customers", customerDoc.id);
-          const customerData = customerDoc.data();
+  //       if (!customerSnapshot.empty) {
+  //         const customerDoc = customerSnapshot.docs[0];
+  //         const customerRef = doc(db, "customers", customerDoc.id);
+  //         const customerData = customerDoc.data();
 
-          await runTransaction(db, async (transaction) => {
-            // Calculate total points to deduct
-            let totalPointsToDeduct = 0;
-            refundedItems.forEach((item) => {
-              if (item.refundQuantity > 0) {
-                const pointsToDeduct = Math.floor(
-                  originalOrder.earnedPoints *
-                    (item.refundQuantity / item.quantity)
-                );
-                totalPointsToDeduct += pointsToDeduct;
-              }
-            });
+  //         await runTransaction(db, async (transaction) => {
+  //           // Calculate total points to deduct
+  //           let totalPointsToDeduct = 0;
+  //           refundedItems.forEach((item) => {
+  //             if (item.refundQuantity > 0) {
+  //               const pointsToDeduct = Math.floor(
+  //                 originalOrder.earnedPoints *
+  //                   (item.refundQuantity / item.quantity)
+  //               );
+  //               totalPointsToDeduct += pointsToDeduct;
+  //             }
+  //           });
 
-            transaction.update(customerRef, {
-              points: increment(-totalPointsToDeduct),
-            });
-          });
-        } else {
-          console.warn(
-            "Customer document not found for ID:",
-            originalOrder.customerID
-          );
-        }
-      }
+  //           transaction.update(customerRef, {
+  //             points: increment(-totalPointsToDeduct),
+  //           });
+  //         });
+  //       } else {
+  //         console.warn(
+  //           "Customer document not found for ID:",
+  //           originalOrder.customerID
+  //         );
+  //       }
+  //     }
 
-      // Reverse meal credits for employees - FETCH EMPLOYEE DOC BY ID
-      if (originalOrder.isEmployee && originalOrder.employeeId) {
-        // Query employee by employeeID
-        const employeeQuery = query(
-          collection(db, "users_01"),
-          where("employeeID", "==", originalOrder.employeeId)
-        );
-        const employeeSnapshot = await getDocs(employeeQuery);
+  //     // Reverse meal credits for employees - FETCH EMPLOYEE DOC BY ID
+  //     if (originalOrder.isEmployee && originalOrder.employeeId) {
+  //       // Query employee by employeeID
+  //       const employeeQuery = query(
+  //         collection(db, "users_01"),
+  //         where("employeeID", "==", originalOrder.employeeId)
+  //       );
+  //       const employeeSnapshot = await getDocs(employeeQuery);
 
-        if (!employeeSnapshot.empty) {
-          const employeeDoc = employeeSnapshot.docs[0];
-          const mealRef = doc(db, "users_01", employeeDoc.id, "meal", "1");
+  //       if (!employeeSnapshot.empty) {
+  //         const employeeDoc = employeeSnapshot.docs[0];
+  //         const mealRef = doc(db, "users_01", employeeDoc.id, "meal", "1");
 
-          // Calculate total credits to restore
-          let totalCreditsToRestore = 0;
-          refundedItems.forEach((item) => {
-            if (item.refundQuantity > 0) {
-              const creditsToRestore =
-                originalOrder.creditsUsed *
-                (item.refundQuantity / item.quantity);
-              totalCreditsToRestore += creditsToRestore;
-            }
-          });
+  //         // Calculate total credits to restore
+  //         let totalCreditsToRestore = 0;
+  //         refundedItems.forEach((item) => {
+  //           if (item.refundQuantity > 0) {
+  //             const creditsToRestore =
+  //               originalOrder.creditsUsed *
+  //               (item.refundQuantity / item.quantity);
+  //             totalCreditsToRestore += creditsToRestore;
+  //           }
+  //         });
 
-          await updateDoc(mealRef, {
-            mealCredits: increment(totalCreditsToRestore),
-          });
-        } else {
-          console.warn(
-            "Employee document not found for ID:",
-            originalOrder.employeeId
-          );
-        }
-      }
+  //         await updateDoc(mealRef, {
+  //           mealCredits: increment(totalCreditsToRestore),
+  //         });
+  //       } else {
+  //         console.warn(
+  //           "Employee document not found for ID:",
+  //           originalOrder.employeeId
+  //         );
+  //       }
+  //     }
 
-      // Save refund record
-      await addDoc(collection(db, "refunds"), refundData);
+  //     // Save refund record
+  //     await addDoc(collection(db, "refunds"), refundData);
 
-      alert("Refund processed successfully!");
-      setIsRefundMode(false);
-      clearItems();
-    } catch (error) {
-      console.error("Refund failed:", error);
-      alert(`Refund processing failed: ${error.message}`);
-    }
-  };
+  //     alert("Refund processed successfully!");
+  //     setIsRefundMode(false);
+  //     clearItems();
+  //   } catch (error) {
+  //     console.error("Refund failed:", error);
+  //     alert(`Refund processing failed: ${error.message}`);
+  //   }
+  // };
 
   const generateKOTId = async (dateObj) => {
     const dbDate = new Date(dateObj);
@@ -1843,7 +1843,7 @@ export default function KOTPanel({
         />
       )}
 
-      {isRefundMode && (
+      {/* {isRefundMode && (
         <div className="mb-4 p-3 bg-yellow-100 border border-yellow-300 rounded">
           <h3 className="font-bold text-lg mb-2">Refund Mode</h3>
           <p>Original Order: {originalOrder.kot_id}</p>
@@ -1904,7 +1904,7 @@ export default function KOTPanel({
             </button>
           </div>
         </div>
-      )}
+      )} */}
     </div>
   );
 }
