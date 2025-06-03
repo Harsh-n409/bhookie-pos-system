@@ -1,3 +1,4 @@
+import React from 'react';  
 import { useState, useEffect } from "react";
 import { db } from "../firebase/config";
 import { increment, where } from "firebase/firestore";
@@ -187,11 +188,23 @@ export default function KOTPanel({
   //   setIsPaymentModalOpen(true);
   // };
 
+  // Utility to clean item names for KOT
+const cleanItemName = (name) => {
+  return name
+    ?.replace(/\([^)]*\)/g, "")                     // remove (anything)
+    ?.replace(/\b(regular|large|medium)\b/gi, "")   // remove sizes
+    ?.replace(/\s+/g, " ")                          // collapse multiple spaces
+    ?.trim();                                       // trim edges
+};
+
+
   const updateInventory = async (kotItems) => {
     try {
       // Process each item in the KOT
       for (const item of kotItems) {
-        const itemRef = doc(db, "inventory", item.id);
+        const inventoryId = item.isUpgrade ? item.originalUpgradeId || item.id : item.id;
+        const itemRef = doc(db, "inventory", inventoryId);
+
         const itemSnap = await getDoc(itemRef);
 
         if (itemSnap.exists()) {
@@ -228,8 +241,10 @@ export default function KOTPanel({
       const stockErrors = [];
 
       for (const item of items) {
-        const itemRef = doc(db, "inventory", item.id);
-        const itemSnap = await getDoc(itemRef);
+        const inventoryId = item.isUpgrade ? item.originalUpgradeId || item.id : item.id;
+        const itemRef = doc(db, "inventory", inventoryId);
+  
+         const itemSnap = await getDoc(itemRef);
 
         if (itemSnap.exists()) {
           const currentStock = itemSnap.data().totalStockOnHand;
@@ -249,12 +264,17 @@ export default function KOTPanel({
   };
 
   // discount function for existing customers
-  const updateTotals = (items = kotItems) => {
-    const subtotal = items.reduce(
-      (sum, item) => sum + item.price * item.quantity,
-      0
-    );
-    setSubTotal(parseFloat(subtotal));
+ const updateTotals = (items = kotItems) => {
+  const subtotal = items.reduce((sum, item) => {
+    // For base items, include their price
+    if (!item.isUpgrade) {
+      return sum + (item.price * item.quantity);
+    }
+    // For upgrades, include their price (they're already in the items array)
+    return sum + (item.price * item.quantity);
+  }, 0);
+  
+  setSubTotal(parseFloat(subtotal));
 
     // Calculate available discount capacity
     const discountableAmount = subtotal - totalDiscount;
@@ -1194,39 +1214,50 @@ export default function KOTPanel({
 
     <hr style="border: none; border-top: 1px dashed #000; margin: 6px 0;" />
 
-    <table style="width: 100%; border-collapse: collapse;">
-      <thead>
+ 
+<table style="width: 100%; border-collapse: collapse;">
+  <thead>
+    <tr>
+      <th style="text-align: left; border-bottom: 1px dashed #000;">Item</th>
+      <th style="text-align: center; border-bottom: 1px dashed #000;">Qty</th>
+      <th style="text-align: right; border-bottom: 1px dashed #000;">Price</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${kotItems.map((item, index) => {
+      const isUpgrade = item.isUpgrade;
+      if (isUpgrade) return '';
+      
+      const upgrade = kotItems.find(i => i.parentItem === item.id && i.isUpgrade);
+      let rows = `
         <tr>
-          <th style="text-align: left; border-bottom: 1px dashed #000;">Item</th>
-          <th style="text-align: center; border-bottom: 1px dashed #000;">Qty</th>
-          <th style="text-align: right; border-bottom: 1px dashed #000;">Price</th>
+          <td style="padding: 2px 0;">${item.name}</td>
+          <td style="text-align: center;">${item.quantity}</td>
+          <td style="text-align: right;">£${item.price.toFixed(2)}</td>
+        </tr>`;
+      
+      if (upgrade) {
+        rows += `
+        <tr>
+          <td style="padding: 2px 0; font-size: 11px; color: #555;">
+            ↑ ${item.name} Upgraded to ${upgrade.itemName.replace('Upgrade to ', '')}
+          </td>
+          <td style="text-align: center;"></td>
+          <td style="text-align: right;">+£${upgrade.price.toFixed(2)}</td>
         </tr>
-      </thead>
-      <tbody>
-        ${kotItems
-          .map(
-            (item) => `
-            <tr>
-              <td style="padding: 2px 0;">
-                ${item.name}
-                ${
-                  item.sauces?.length > 0
-                    ? `<div style="font-size: 10px; color: #555;">(${item.sauces.join(
-                        ", "
-                      )})</div>`
-                    : ""
-                }
-              </td>
-              <td style="text-align: center;">${item.quantity}</td>
-              <td style="text-align: right;">£${(
-                item.quantity * item.price
-              ).toFixed(2)}</td>
-            </tr>`
-          )
-          .join("")}
-      </tbody>
-    </table>
+        <tr>
+         <td style="padding: 2px 0; font-weight: bold;">
+  Total for ${cleanItemName(item.name)}
+</td>
 
+          <td style="text-align: center;"></td>
+          <td style="text-align: right;">= £${(item.price + upgrade.price).toFixed(2)}</td>
+        </tr>`;
+      }
+      return rows;
+    }).join('')}
+  </tbody>
+</table>
     <hr style="border: none; border-top: 1px dashed #000; margin: 6px 0;" />
 
     <div style="display: flex; justify-content: space-between;">
@@ -1383,12 +1414,6 @@ export default function KOTPanel({
                         {item.sauces.join(", ")}
                       </div>
                     )}
-                    {/* Show base item + customization separately if needed
-                    {item.baseItemName && item.customizationName && (
-                      <div className="text-sm text-gray-500">
-                        {item.baseItemName} with {item.customizationName}
-                      </div>
-                    )} */}
                   </td>
                   <td>
                     <div className="flex items-center gap-2">
