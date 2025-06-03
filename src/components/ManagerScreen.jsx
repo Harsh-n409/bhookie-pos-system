@@ -72,7 +72,218 @@ export default function ManagerScreen() {
     };
   }, [logout]);
 
-  const handleOpenCashier = async () => {
+  // Print order function similar to KOTPanel.jsx
+const handlePrintOrder = (order) => {
+  try {
+    let pointsToDeduct = 0;
+    let updatedPoints = 0;
+
+    // Prepare highlighted order ID string
+    const fullOrderId = order.kot_id || order.id || '';
+    const orderIdPrefix = fullOrderId.slice(0, -3);
+    const orderIdLastThree = fullOrderId.slice(-3);
+    const highlightedOrderId = `${orderIdPrefix}<span style="color: red; font-weight: bold;">${orderIdLastThree}</span>`;
+
+    const printContent = `
+  <div style="
+    width: 280px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    color: #000;
+    padding: 5px;
+  ">
+      <div style="text-align: center; margin-bottom: 5px;">
+        <img src="/logo192.png" alt="Logo" style="max-width: 100px; margin-bottom: 10px;" />
+        <h3 style="text-align: center; margin: 0; padding: 5px 0;">Order</h3>
+      </div>
+      <div style="text-align: left; margin-top: 10px;">
+        <div style="display: flex; justify-content: space-between;">
+          <span><strong>Order ID:</strong></span>
+          <span>${highlightedOrderId}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+          <span><strong>Cashier:</strong></span>
+          <span>${order.cashierName || ''} (${order.cashierId || ''})</span>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+          <span><strong>Order Type:</strong></span>
+          <span>${order.orderType === "dine-in" ? "Dine In" : "Takeaway"}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+          <span><strong>Time:</strong></span>
+          <span>${order.date?.toDate?.().toLocaleString() || new Date().toLocaleString()}</span>
+        </div>
+
+        ${
+          order.customerID
+            ? `<div style="display: flex; justify-content: space-between;">
+                <span><strong>${order.isEmployee ? "Employee" : "Customer"}:</strong></span>
+                <span>${order.customerName || ''} (${order.customerID || ''})</span>
+              </div>`
+            : ""
+        }
+
+        ${
+          order.isEmployee
+            ? `<div style="display: flex; justify-content: space-between;">
+                <span><strong>Meal Credits Used:</strong></span>
+                <span>£${(order.creditsUsed || 0).toFixed(2)}</span>
+              </div>
+              ${
+                (order.cashDue || 0) > 0
+                  ? `<div style="display: flex; justify-content: space-between;">
+                      <span><strong>Cash Due:</strong></span>
+                      <span>£${(order.cashDue || 0).toFixed(2)}</span>
+                    </div>`
+                  : ""
+              }`
+            : ""
+        }
+
+        <hr style="border: none; border-top: 1px dashed #000; margin: 6px 0;" />
+
+        <table style="width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr>
+              <th style="text-align: left; border-bottom: 1px dashed #000;">Item</th>
+              <th style="text-align: center; border-bottom: 1px dashed #000;">Qty</th>
+              <th style="text-align: right; border-bottom: 1px dashed #000;">Price</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${
+              order.items?.map((item) => {
+                const isUpgrade = item.isUpgrade;
+                if (isUpgrade) return '';
+
+                const upgrade = order.items.find(i => i.parentItem === item.id && i.isUpgrade);
+                let rows = `
+                  <tr>
+                    <td style="padding: 2px 0;">${item.name}</td>
+                    <td style="text-align: center;">${item.quantity}</td>
+                    <td style="text-align: right;">£${item.price.toFixed(2)}</td>
+                  </tr>`;
+
+                if (upgrade) {
+                  rows += `
+                  <tr>
+                    <td style="padding: 2px 0; font-size: 11px; color: #555;">
+                      ↑ ${item.name} Upgraded to ${upgrade.itemName.replace('Upgrade to ', '')}
+                    </td>
+                    <td style="text-align: center;"></td>
+                    <td style="text-align: right;">+£${upgrade.price.toFixed(2)}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 2px 0; font-weight: bold;">
+                      Total for ${item.name.replace(/\([^)]*\)/g, '').replace(/\b(regular|large|medium)\b/gi, '').trim()}
+                    </td>
+                    <td style="text-align: center;"></td>
+                    <td style="text-align: right;">= £${(item.price + upgrade.price).toFixed(2)}</td>
+                  </tr>`;
+                }
+
+                return rows;
+              }).join('') || ''
+            }
+          </tbody>
+        </table>
+
+        <hr style="border: none; border-top: 1px dashed #000; margin: 6px 0;" />
+
+        <div style="display: flex; justify-content: space-between;">
+          <span><strong>Sub Total:</strong></span>
+          <span>£${(order.subTotal || 0).toFixed(2)}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+          <span><strong>Discount:</strong></span>
+          <span>£${
+            order.isEmployee
+              ? (order.creditsUsed || 0).toFixed(2)
+              : ((order.subTotal || 0) - (order.total || 0)).toFixed(2)
+          }</span>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+          <span><strong>Total:</strong></span>
+          <span>£${(order.total || 0).toFixed(2)}</span>
+        </div>
+
+        ${
+          order.customerID && !order.isEmployee && (order.discount || 0) > 0
+            ? `<p style="color: green;"> Discount applied: £${(pointsToDeduct).toFixed(2)} (Remaining Points: ${updatedPoints})</p>`
+            : ""
+        }
+
+        ${
+          order.customerID && !order.isEmployee
+            ? `<p><strong>Earned Points:</strong> ${order.earnedPoints || 0}</p>`
+            : ""
+        }
+
+        <hr style="border: none; border-top: 1px dashed #000; margin: 6px 0;" />
+
+        <p style="text-align: center;">--- Thank You ---</p>
+      </div>
+    </div>`;
+
+    const printWindow = window.open("", "_blank");
+    if (printWindow) {
+      printWindow.document.open();
+      printWindow.document.write(`
+    <html>
+      <head>
+        <title>Print KOT</title>
+        <style>
+          body {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            width: 280px;
+            padding: 10px;
+            color: #000;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+          }
+          th, td {
+            padding: 2px 0;
+          }
+          th {
+            border-bottom: 1px dashed #000;
+          }
+          td:nth-child(2), td:nth-child(3) {
+            text-align: center;
+          }
+          td:nth-child(3) {
+            text-align: right;
+          }
+          hr {
+            border-top: 1px dashed #000;
+            margin: 6px 0;
+          }
+          .sauces {
+            font-size: 10px;
+            color: #555;
+          }
+        </style>
+      </head>
+      <body onload="window.print(); window.close();">
+        ${printContent}
+      </body>
+    </html>
+  `);
+      printWindow.document.close();
+    }
+
+    // Clear selected order info after printing
+    setSelectedOrderInfo(null);
+  } catch (error) {
+    console.error("Error in print generation:", error);
+    alert("Failed to print order. Please try again.");
+  }
+};
+
+
+   const handleOpenCashier = async () => {
     const trimmedCode = cashierCode.trim();
     if (!trimmedCode) {
       setCashierStatus("Please enter a valid employee ID.");
@@ -992,8 +1203,7 @@ export default function ManagerScreen() {
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  // Implement print handler here
-                                  alert(`Print order ${orderId}`);
+                                  handlePrintOrder(order);
                                 }}
                                 className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded"
                               >
