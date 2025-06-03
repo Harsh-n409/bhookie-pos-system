@@ -49,8 +49,8 @@ const PaymentScreen = ({ amount, isEmployee, onComplete, onClose }) => {
   };
 
   // Unified payment processing function
-  const processPayment = useCallback((method) => {
-    let paymentAmount = tendered; // Start with what's entered in the input field
+  const processPayment = useCallback((method, explicitAmount) => {
+    let paymentAmount = explicitAmount !== undefined ? explicitAmount : tendered; // Use explicit amount if provided
 
     // --- Input Validation ---
     if (paymentAmount <= 0 && method !== "Card") { // Card button passes remaining, so 0 is fine if remaining is 0
@@ -266,12 +266,9 @@ const PaymentScreen = ({ amount, isEmployee, onComplete, onClose }) => {
 
           <button
             onClick={() => {
-              // For Card, ensure the input field is set to the exact remaining amount before processing.
-              // This makes the validation inside processPayment more robust.
-             setTenderedStr(remainingAmount.toFixed(2));
-             setActiveMethod("Card");
-             processPayment("Card");
-
+              // For Card, call processPayment with explicit amount to avoid async state update issues
+              setActiveMethod("Card");
+              processPayment("Card", remainingAmount);
             }}
             className={`flex-1 p-2 ${
               activeMethod === "Card" ? "bg-blue-600" : "bg-blue-500 hover:bg-blue-600"
