@@ -1,4 +1,4 @@
-import React from 'react';  
+import React from "react";
 import { useState, useEffect } from "react";
 import { db } from "../firebase/config";
 import { increment, where } from "firebase/firestore";
@@ -189,20 +189,21 @@ export default function KOTPanel({
   // };
 
   // Utility to clean item names for KOT
-const cleanItemName = (name) => {
-  return name
-    ?.replace(/\([^)]*\)/g, "")                     // remove (anything)
-    ?.replace(/\b(regular|large|medium)\b/gi, "")   // remove sizes
-    ?.replace(/\s+/g, " ")                          // collapse multiple spaces
-    ?.trim();                                       // trim edges
-};
-
+  const cleanItemName = (name) => {
+    return name
+      ?.replace(/\([^)]*\)/g, "") // remove (anything)
+      ?.replace(/\b(regular|large|medium)\b/gi, "") // remove sizes
+      ?.replace(/\s+/g, " ") // collapse multiple spaces
+      ?.trim(); // trim edges
+  };
 
   const updateInventory = async (kotItems) => {
     try {
       // Process each item in the KOT
       for (const item of kotItems) {
-        const inventoryId = item.isUpgrade ? item.originalUpgradeId || item.id : item.id;
+        const inventoryId = item.isUpgrade
+          ? item.originalUpgradeId || item.id
+          : item.id;
         const itemRef = doc(db, "inventory", inventoryId);
 
         const itemSnap = await getDoc(itemRef);
@@ -241,10 +242,12 @@ const cleanItemName = (name) => {
       const stockErrors = [];
 
       for (const item of items) {
-        const inventoryId = item.isUpgrade ? item.originalUpgradeId || item.id : item.id;
+        const inventoryId = item.isUpgrade
+          ? item.originalUpgradeId || item.id
+          : item.id;
         const itemRef = doc(db, "inventory", inventoryId);
-  
-         const itemSnap = await getDoc(itemRef);
+
+        const itemSnap = await getDoc(itemRef);
 
         if (itemSnap.exists()) {
           const currentStock = itemSnap.data().totalStockOnHand;
@@ -264,17 +267,17 @@ const cleanItemName = (name) => {
   };
 
   // discount function for existing customers
- const updateTotals = (items = kotItems) => {
-  const subtotal = items.reduce((sum, item) => {
-    // For base items, include their price
-    if (!item.isUpgrade) {
-      return sum + (item.price * item.quantity);
-    }
-    // For upgrades, include their price (they're already in the items array)
-    return sum + (item.price * item.quantity);
-  }, 0);
-  
-  setSubTotal(parseFloat(subtotal));
+  const updateTotals = (items = kotItems) => {
+    const subtotal = items.reduce((sum, item) => {
+      // For base items, include their price
+      if (!item.isUpgrade) {
+        return sum + item.price * item.quantity;
+      }
+      // For upgrades, include their price (they're already in the items array)
+      return sum + item.price * item.quantity;
+    }, 0);
+
+    setSubTotal(parseFloat(subtotal));
 
     // Calculate available discount capacity
     const discountableAmount = subtotal - totalDiscount;
@@ -1056,6 +1059,8 @@ const cleanItemName = (name) => {
       // ✅ Use existing earnedPoints from state
       console.log("Earned Points for this order:", earnedPoints);
 
+      // Calculate discount ratio for proportional pricing
+      const discountRatio = subTotal > 0 ? total / subTotal : 1;
       // ✅ Prepare KOT data
       const data = {
         kot_id: newKOTId,
@@ -1074,6 +1079,7 @@ const cleanItemName = (name) => {
           name: item.name,
           quantity: item.quantity,
           price: item.price,
+          effectivePrice: parseFloat((item.price * discountRatio).toFixed(2)),
           refundedQuantity: 0, // NEW: Track refunded quantities per item
           refunded: false, // NEW: Indicates if item is fully refunded
         })),
@@ -1224,23 +1230,29 @@ const cleanItemName = (name) => {
     </tr>
   </thead>
   <tbody>
-    ${kotItems.map((item, index) => {
-      const isUpgrade = item.isUpgrade;
-      if (isUpgrade) return '';
-      
-      const upgrade = kotItems.find(i => i.parentItem === item.id && i.isUpgrade);
-      let rows = `
+    ${kotItems
+      .map((item, index) => {
+        const isUpgrade = item.isUpgrade;
+        if (isUpgrade) return "";
+
+        const upgrade = kotItems.find(
+          (i) => i.parentItem === item.id && i.isUpgrade
+        );
+        let rows = `
         <tr>
           <td style="padding: 2px 0;">${item.name}</td>
           <td style="text-align: center;">${item.quantity}</td>
           <td style="text-align: right;">£${item.price.toFixed(2)}</td>
         </tr>`;
-      
-      if (upgrade) {
-        rows += `
+
+        if (upgrade) {
+          rows += `
         <tr>
           <td style="padding: 2px 0; font-size: 11px; color: #555;">
-            ↑ ${item.name} Upgraded to ${upgrade.itemName.replace('Upgrade to ', '')}
+            ↑ ${item.name} Upgraded to ${upgrade.itemName.replace(
+            "Upgrade to ",
+            ""
+          )}
           </td>
           <td style="text-align: center;"></td>
           <td style="text-align: right;">+£${upgrade.price.toFixed(2)}</td>
@@ -1251,11 +1263,14 @@ const cleanItemName = (name) => {
 </td>
 
           <td style="text-align: center;"></td>
-          <td style="text-align: right;">= £${(item.price + upgrade.price).toFixed(2)}</td>
+          <td style="text-align: right;">= £${(
+            item.price + upgrade.price
+          ).toFixed(2)}</td>
         </tr>`;
-      }
-      return rows;
-    }).join('')}
+        }
+        return rows;
+      })
+      .join("")}
   </tbody>
 </table>
     <hr style="border: none; border-top: 1px dashed #000; margin: 6px 0;" />

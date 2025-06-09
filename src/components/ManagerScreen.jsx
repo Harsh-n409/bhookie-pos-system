@@ -1309,9 +1309,9 @@ const handlePrintOrder = (order) => {
                       <td className="p-2">{employee.employeeID}</td>
                       <td className="p-2">{employee.meal.mealCredits || 0}</td>
                       <td className="p-2">
-                        {employee.meal.mealCredits === 0 ? (
+                        {(employee.meal.mealCredits === 0 || employee.isClockedIn===false)? (
                           <span className="text-red-600 font-medium">
-                            Used All
+                            Not Available
                           </span>
                         ) : (
                           <span className="text-green-600 font-medium">
