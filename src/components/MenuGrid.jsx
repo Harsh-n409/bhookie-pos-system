@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import {
   collection,
+  updateDoc,
   getDocs,
   getDoc,
   doc,
@@ -22,6 +23,8 @@ export default function MenuGrid({
   const [selectedForUpgrade, setSelectedForUpgrade] = useState(null);
   const [showCustomizationPopup, setShowCustomizationPopup] = useState(false);
   const [customizationOptions, setCustomizationOptions] = useState([]);
+  const [nextCustomization, setNextCustomization] = useState(null);
+  const [customizationStep, setCustomizationStep] = useState(0); 
   const [selectedMeal, setSelectedMeal] = useState(null);
   const [categories, setCategories] = useState([]);
   const [items, setItems] = useState([]);
@@ -34,9 +37,6 @@ export default function MenuGrid({
   const [showOffers, setShowOffers] = useState(true);
   const [offers, setOffers] = useState([]);
 
-  useEffect(() => {
-  console.log("Current inventory:", inventory);
-}, [inventory]);
 
   // Clickable items - lowercased for comparison
   const clickableItems = [
@@ -101,6 +101,10 @@ const ELIGIBLE_MEAL_KEYWORDS = [
   //     color: "bg-gradient-to-r from-blue-600 to-cyan-500"
   //   }
   // ];
+
+
+
+
 
   useEffect(() => {
     const fetchData = async () => {
@@ -205,38 +209,70 @@ const ELIGIBLE_MEAL_KEYWORDS = [
     fetchData();
   }, []);
 
+  
   const filteredItems = useMemo(() => {
     return items.filter((item) => item.categoryId === selectedCategoryId);
   }, [items, selectedCategoryId]);
 
-  useEffect(() => {
-    console.log("FILTERED ITEMS:", filteredItems);
-  }, [filteredItems]);
-
+  
+  
 
 const handleItemClick = async (item) => {
   setSelectedItem(item);
+  setNextCustomization(null); // reset
+
   try {
-    if (item.requiresCustomization) {
-      // [Keep existing customization logic unchanged]
-      const customizationCategoryRef = doc(db, "category", item.customizationCategory);
-      const categoryQuery = query(
-        collection(db, "items"),
-        where("categoryId", "==", customizationCategoryRef),
-        where("active", "==", true)
+    if (item.requiresCustomization && item.customizationCategory?.length) {
+      const optionsByCategory = await Promise.all(
+        item.customizationCategory.map(async (catId) => {
+          try {
+            const allItemsSnap = await getDocs(
+              query(collection(db, "items"), where("active", "==", true))
+            );
+
+            const filtered = allItemsSnap.docs
+              .map(doc => ({ id: doc.id, ...doc.data() }))
+              .filter(doc => {
+                const categoryField = doc.categoryId;
+                const actualCategoryId = typeof categoryField === "string"
+                  ? categoryField.trim()
+                  : categoryField?.id;
+                return actualCategoryId === catId.trim();
+              });
+
+            return {
+              categoryId: catId.trim(),
+              options: filtered,
+            };
+          } catch (err) {
+            return { categoryId: catId.trim(), options: [] };
+          }
+        })
       );
-      const querySnapshot = await getDocs(categoryQuery);
-      const options = querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setCustomizationOptions(options);
-      setSelectedMeal(item);
-      setShowCustomizationPopup(true);
-      return;
+
+      const cat01 = optionsByCategory.find(c => c.categoryId === "cat01" && c.options.length > 0);
+      const cat05 = optionsByCategory.find(c => c.categoryId === "cat05" && c.options.length > 0);
+
+      if (cat01) {
+        setCustomizationOptions([cat01]);
+        setSelectedMeal(item);
+        setCustomizationStep(0);
+        setShowCustomizationPopup(true);
+
+        if (cat05) setNextCustomization(cat05); // wait for user to select bites
+        return;
+      }
+
+      if (cat05) {
+        setCustomizationOptions([cat05]);
+        setSelectedMeal(item);
+        setCustomizationStep(1);
+        setShowCustomizationPopup(true);
+        return;
+      }
     }
 
-    // Always add base item first
+    // fallback normal add
     onAddItem({
       id: item.id,
       name: item.itemName,
@@ -244,13 +280,11 @@ const handleItemClick = async (item) => {
       quantity: 1,
     });
 
-    // 1. HARD STOP for Large items
     if (item.itemName.toLowerCase().includes("large")) return;
 
-    // 2. Check upgrade eligibility
     const isBaseEligible = ELIGIBLE_BASE_ITEMS.includes(item.itemName.trim());
-    const isMeal = item.categoryId === "meals"; // Typo fixed from "meals" to match your DB
-    
+    const isMeal = item.categoryId === "meals";
+
     if (isBaseEligible || isMeal) {
       const upgrades = await getUpgradeOptions(isMeal);
       if (upgrades.length > 0) {
@@ -260,11 +294,11 @@ const handleItemClick = async (item) => {
       }
     }
   } catch (err) {
-    console.error("Error handling item click:", err);
-    // Fallback to basic add
     onAddItem({ id: item.id, name: item.itemName, price: item.price, quantity: 1 });
   }
 };
+
+
 
 // Helper function for upgrade pricing
 const getUpgradeOptions = async (isMeal) => {
@@ -283,48 +317,67 @@ const getUpgradeOptions = async (isMeal) => {
   }));
 };
 
-    const handleMealCustomization = async (selectedOption) => {
-  if (selectedMeal) {
-    // Add the customized meal
-    onAddItem({
-      id: selectedMeal.id,
-      name: selectedMeal.itemName,
-      price: selectedMeal.price,
-      quantity: 1,
-      customization: {
-        category: selectedMeal.customizationCategory,
-        selected: selectedOption.itemName,
+const handleMealCustomization = (option, categoryId) => {
+  if (!selectedMeal) return;
+
+  onAddItem({
+    id: selectedMeal.id,
+    name: selectedMeal.itemName,
+    price: selectedMeal.price,
+    quantity: 1,
+    customizations: {
+      [categoryId]: {
+        id: option.id,
+        name: option.itemName,
+        price: option.price || 0,
       },
-    });
+    },
+  });
 
-    // Check if meal contains eligible fries
-    const hasEligibleFries = ELIGIBLE_MEAL_KEYWORDS.some(
-      keyword => selectedMeal.itemName.includes(keyword)
-    );
+  // CLOSE current (Bites) popup
+setShowCustomizationPopup(false);
 
-    if (hasEligibleFries) {
-      const q = query(
-        collection(db, "items"),
-        where("categoryId", "==", "upgrades"),
-        where("parentCategory", "==", "meals")
-      );
-      const querySnapshot = await getDocs(q);
-      const upgrades = querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-        stock: inventory[doc.id]?.totalStockOnHand || 0,
-      }));
-      
+if (nextCustomization) {
+  // Show Burger popup next
+  setCustomizationOptions([nextCustomization]);
+  setCustomizationStep(1);
+  setShowCustomizationPopup(true);
+  setNextCustomization(null);
+} else {
+  // All customizations done, now check for upgrade
+  const hasEligibleFries = ELIGIBLE_MEAL_KEYWORDS.some(
+    keyword => selectedMeal.itemName.includes(keyword)
+  );
+
+  if (hasEligibleFries) {
+    getUpgradeOptions(true).then(upgrades => {
       if (upgrades.length > 0) {
         setSelectedForUpgrade(selectedMeal);
         setUpgradeOptions(upgrades);
         setShowUpgradePopup(true);
       }
-    }
+    });
   }
+
+  setSelectedMeal(null); // reset
+}
+
+
+  // CLOSE current (Bites) popup
   setShowCustomizationPopup(false);
-  setSelectedMeal(null);
+
+  // IF Burger step exists, open now
+  if (nextCustomization) {
+    setCustomizationOptions([nextCustomization]);
+    setCustomizationStep(1);
+    setShowCustomizationPopup(true);
+    setNextCustomization(null);
+  } else {
+    setSelectedMeal(null);
+  }
 };
+
+
 // In handleAddUpgrade (MenuGrid.jsx)
 const handleAddUpgrade = (upgrade) => {
   if (!selectedForUpgrade) {
@@ -556,41 +609,57 @@ const handleAddUpgrade = (upgrade) => {
         )}
       </div>
 
-      {showCustomizationPopup && selectedMeal && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-40">
-          <div className="bg-white rounded-lg p-5 shadow-lg max-w-md w-full">
-            <h2 className="text-xl font-bold mb-5 text-purple-900">
-              Customize {selectedMeal.itemName}
-            </h2>
+     {showCustomizationPopup && selectedMeal && (
+  <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-40">
+    <div className="bg-white rounded-lg p-5 shadow-lg max-w-md w-full max-h-[80vh] overflow-y-auto">
+      <h2 className="text-xl font-bold mb-5 text-purple-900">
+        Customize {selectedMeal.itemName}
+      </h2>
 
-            {customizationOptions.length > 0 ? (
+      {customizationOptions.length > 0 ? (
+        <div className="space-y-6">
+          {customizationOptions.map((category) => (
+            <div key={category.categoryId}>
+              <h3 className="font-semibold mb-3 text-lg border-b pb-2">
+                {category.categoryId === "cat01" 
+                  ? "Choose Your Bites:" 
+                  : category.categoryId === "cat05"
+                  ? "Choose Your Burger:"
+                  : "Choose Your Option:"}
+              </h3>
               <div className="grid grid-cols-2 gap-3">
-                {customizationOptions.map((option) => (
+                {category.options.map((option) => (
                   <button
                     key={option.id}
-                    onClick={() => handleMealCustomization(option)}
-                    className="p-3 bg-purple-100 hover:bg-purple-200 rounded-lg text-left"
+                    onClick={() => handleMealCustomization(option, category.categoryId)}
+                    className="p-3 bg-purple-100 hover:bg-purple-200 rounded-lg text-left transition"
                   >
                     <div className="font-semibold">{option.itemName}</div>
                     {option.price > 0 && (
                       <div className="text-sm">+£{option.price.toFixed(2)}</div>
                     )}
+                    {inventory[option.id]?.totalStockOnHand <= 0 && (
+                      <div className="text-xs text-red-500 mt-1">Out of stock</div>
+                    )}
                   </button>
                 ))}
               </div>
-            ) : (
-              <div className="text-gray-500">No options available</div>
-            )}
-
-            <button
-              onClick={() => setShowCustomizationPopup(false)}
-              className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-            >
-              Cancel
-            </button>
-          </div>
+            </div>
+          ))}
         </div>
+      ) : (
+        <div className="text-gray-500">No customization options available</div>
       )}
+
+      <button
+        onClick={() => setShowCustomizationPopup(false)}
+        className="mt-6 w-full py-2 bg-red-600 text-white rounded hover:bg-red-700 transition"
+      >
+        No Thanks 
+      </button>
+    </div>
+  </div>
+)}
 
       {showUpgradePopup && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-50">

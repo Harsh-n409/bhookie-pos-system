@@ -100,6 +100,7 @@ export default function ManagerLogin() {
       </button>
       <div className="bg-white shadow-md p-6 rounded w-full max-w-sm">
         <h2 className="text-2xl font-semibold mb-4 text-center">Manager Login</h2>
+        <form onSubmit={(e)=>{e.preventDefault(); handleLogin();}}>
         <input
           type="text"
           placeholder="Enter employee id"
@@ -115,6 +116,7 @@ export default function ManagerLogin() {
         >
           {loading ? "Logging in..." : "Login"}
         </button>
+        </form>
       </div>
     </div>
   );
