@@ -25,24 +25,29 @@ const PaymentScreen = ({ amount, isEmployee, onComplete, onClose }) => {
     if (value === 'C') {
       setTenderedStr('');
     } else if (value === '⌫') {
-      // Remove the last digit in the calculator style input
+      // Remove the last digit from the string representing cents
       setTenderedStr(prev => {
         if (!prev || prev.length === 0) return '';
-        // Remove last digit and shift right
-        let num = Math.floor(parseFloat(prev || '0') * 100);
-        num = Math.floor(num / 10);
+        // Remove last character from string of digits only
+        let digits = prev.replace('.', '');
+        digits = digits.slice(0, -1);
+        if (digits.length === 0) return '';
+        // Format digits back to decimal string with two decimals
+        let num = parseInt(digits, 10);
         return (num / 100).toFixed(2);
       });
     } else {
-      // Calculator style input: shift digits left and add new digit at rightmost decimal place
+      // Add new digit to the string representing cents
       setTenderedStr(prev => {
-        let num = Math.floor(parseFloat(prev || '0') * 100);
-        // Shift left by one digit and add new digit
-        num = num * 10 + parseInt(value, 10);
-        // Limit to max 6 digits (e.g., 9999.99)
-        if (num > 999999) {
-          num = 999999;
+        // Remove decimal point to get digits only
+        let digits = prev.replace('.', '') || '0';
+        // Append new digit
+        digits = digits + value;
+        // Limit to max 6 digits (e.g., 999999 cents = 9999.99)
+        if (digits.length > 6) {
+          digits = digits.slice(0, 6);
         }
+        let num = parseInt(digits, 10);
         return (num / 100).toFixed(2);
       });
     }
@@ -53,7 +58,7 @@ const PaymentScreen = ({ amount, isEmployee, onComplete, onClose }) => {
     let paymentAmount = explicitAmount !== undefined ? explicitAmount : tendered; // Use explicit amount if provided
 
     // --- Input Validation ---
-    if (paymentAmount <= 0 && method !== "Card") { // Card button passes remaining, so 0 is fine if remaining is 0
+    if (paymentAmount <= 0 && method !== "Card" && remainingAmount > 0) { // Allow 0 payment if remainingAmount is 0 (e.g., points cover full amount)
       alert("Please enter a valid amount.");
       return;
     }
