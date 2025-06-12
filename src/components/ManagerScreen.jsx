@@ -31,6 +31,15 @@ const roleMap = {
 export default function ManagerScreen() {
   const navigate = useNavigate(); // Initialize navigate
   const [activeTab, setActiveTab] = useState("Orders");
+
+  // Placeholder handlers for Start Day and End Day buttons
+  const handleStartDay = () => {
+    alert("Start Day clicked");
+  };
+
+  const handleEndDay = () => {
+    alert("End Day clicked");
+  };
   const [orders, setOrders] = useState([]);
   const [selectedItemInfo, setSelectedItemInfo] = useState(null);
   const [employees, setEmployees] = useState([]);
@@ -1085,6 +1094,14 @@ export default function ManagerScreen() {
           >
             Cashier Control Panel
           </button>
+          <button
+            className={`block w-full text-left px-4 py-2 rounded ${
+              activeTab === "Day Control" ? "bg-gray-700" : "hover:bg-gray-700"
+            }`}
+            onClick={() => setActiveTab("Day Control")}
+          >
+            Day Control
+          </button>
         </nav>
 
         {/* Fixed Back Button */}
@@ -1442,6 +1459,26 @@ export default function ManagerScreen() {
                 disabled={!cashierCode || cashierLoading}
               >
                 End Shift
+              </button>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "Day Control" && (
+          <div>
+            <h3 className="text-lg font-semibold mb-4">Day Control</h3>
+            <div className="flex gap-4">
+              <button
+                onClick={handleStartDay}
+                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+              >
+                Start Day
+              </button>
+              <button
+                onClick={handleEndDay}
+                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+              >
+                End Day
               </button>
             </div>
           </div>
