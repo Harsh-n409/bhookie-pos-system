@@ -630,10 +630,10 @@ export default function RefundPage() {
                 className="border p-2 rounded w-full"
               />
               <button
-                onClick={fetchOrders}
+                onClick={() => navigate(-1)}
                 className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
               >
-                Refresh
+                Back
               </button>
             </div>
           </div>

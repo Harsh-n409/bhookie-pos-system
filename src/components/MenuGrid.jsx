@@ -326,6 +326,8 @@ const handleMealCustomization = (option, categoryId) => {
     price: selectedMeal.price,
     quantity: 1,
     customizations: {
+      category: selectedMeal.customizationCategory,
+      selected: option.itemName,
       [categoryId]: {
         id: option.id,
         name: option.itemName,
