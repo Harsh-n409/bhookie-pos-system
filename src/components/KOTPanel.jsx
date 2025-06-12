@@ -1061,6 +1061,8 @@ export default function KOTPanel({
 
       // Calculate discount ratio for proportional pricing
       const discountRatio = subTotal > 0 ? total / subTotal : 1;
+
+      
       // ✅ Prepare KOT data
       const data = {
         kot_id: newKOTId,

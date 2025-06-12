@@ -73,10 +73,19 @@ export default function RefundPage() {
       }
 
       const snapshot = await getDocs(q);
-      const data = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+      const data = snapshot.docs.map((doc) => {
+        const orderData = doc.data();
+        return {
+          id: doc.id,
+          ...orderData,
+          // Ensure backward compatibility
+          items: orderData.items.map((item) => ({
+            ...item,
+            // Fallback to original price if effectivePrice doesn't exist
+            effectivePrice: item.effectivePrice || item.price,
+          })),
+        };
+      });
       setOrders(data);
     } catch (err) {
       console.error("Error fetching orders:", err);
@@ -108,6 +117,7 @@ export default function RefundPage() {
       }
 
       // Create refund transaction
+      // Create refund transaction using EFFECTIVE PRICE
       const refundData = {
         originalOrderId: originalOrder.id,
         date: Timestamp.now(),
@@ -116,11 +126,11 @@ export default function RefundPage() {
           .map((item) => ({
             id: item.id,
             name: item.name,
-            price: item.price,
+            price: item.effectivePrice, // Use effective price here
             quantity: item.refundQuantity,
           })),
         refundAmount: refundedItems.reduce(
-          (sum, item) => sum + item.price * item.refundQuantity,
+          (sum, item) => sum + item.effectivePrice * item.refundQuantity, // Use effective price
           0
         ),
         processedBy: originalOrder.cashierName,
@@ -298,7 +308,7 @@ export default function RefundPage() {
         // Create updated items array with full refund quantities
         const updatedItems = kotData.items.map((item) => {
           const remainingQty = item.quantity - (item.refundedQuantity || 0);
-          refundAmount += remainingQty * item.price;
+          refundAmount += remainingQty * item.effectivePrice;
 
           return {
             ...item,
@@ -526,6 +536,8 @@ export default function RefundPage() {
                       <th className="p-2">Already Refunded</th>
                       <th className="p-2">Remaining</th>
                       <th className="p-2">Refund Qty</th>
+                      {/* Added Effective Price column */}
+                      <th className="p-2">Effective Price</th>
                       <th className="p-2">Refund Amount</th>
                     </tr>
                   </thead>
@@ -559,8 +571,19 @@ export default function RefundPage() {
                             disabled={item.remainingQuantity === 0}
                           />
                         </td>
+                        {/* Display effective price */}
                         <td className="p-2 text-center">
-                          £{(item.price * item.refundQuantity).toFixed(2)}
+                          £
+                          {item.effectivePrice?.toFixed(2) ||
+                            item.price.toFixed(2)}
+                        </td>
+                        {/* Use effective price for calculation */}
+                        <td className="p-2 text-center">
+                          £
+                          {(
+                            (item.effectivePrice || item.price) *
+                            item.refundQuantity
+                          ).toFixed(2)}
                         </td>
                       </tr>
                     ))}
@@ -573,7 +596,10 @@ export default function RefundPage() {
                   Total Refund: £
                   {refundedItems
                     .reduce(
-                      (sum, item) => sum + item.price * item.refundQuantity,
+                      (sum, item) =>
+                        sum +
+                        (item.effectivePrice || item.price) *
+                          item.refundQuantity,
                       0
                     )
                     .toFixed(2)}
@@ -790,7 +816,8 @@ export default function RefundPage() {
                                           <div>
                                             Total: £
                                             {(
-                                              Number(item.price) * Number(item.quantity)
+                                              Number(item.price) *
+                                              Number(item.quantity)
                                             ).toFixed(2)}
                                           </div>
                                           {item.refundedQuantity > 0 && (
