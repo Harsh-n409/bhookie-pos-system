@@ -313,21 +313,21 @@ export default function KOTPanel({
     setEarnedPoints(earned);
   };
   // discount function for new customers
-  const applyNewCustomerDiscount = () => {
-    const subtotal = kotItems.reduce(
-      (sum, item) => sum + item.price * item.quantity,
-      0
-    );
-    const discount = Math.min(20, subtotal);
-    setDiscount(parseFloat(discount));
+  // const applyNewCustomerDiscount = () => {
+  //   const subtotal = kotItems.reduce(
+  //     (sum, item) => sum + item.price * item.quantity,
+  //     0
+  //   );
+  //   const discount = Math.min(20, subtotal);
+  //   setDiscount(parseFloat(discount));
 
-    const calculatedTotal = subtotal - discount;
-    setTotal(parseFloat(calculatedTotal));
+  //   const calculatedTotal = subtotal - discount;
+  //   setTotal(parseFloat(calculatedTotal));
 
-    // ✅ Earned points calculated from fresh total
-    const earnedPoints = Math.floor(calculatedTotal * 0.1);
-    setEarnedPoints(earnedPoints);
-  };
+  //   // ✅ Earned points calculated from fresh total
+  //   const earnedPoints = Math.floor(calculatedTotal * 0.1);
+  //   setEarnedPoints(earnedPoints);
+  // };
   const openNumberPad = (index) => {
     setSelectedItemIndex(index);
     setQuantityInput("");
@@ -407,6 +407,13 @@ export default function KOTPanel({
     }
 
     try {
+      const dayStatusDoc = await getDoc(doc(db, "dayStatus", "1"));
+      const dayStatusData = dayStatusDoc.data();
+
+      if (!dayStatusData?.isStarted) {
+        alert("Day has not started yet");
+        return;
+      }
       const cashierQuery = query(
         collection(db, "cashierAttendance"),
         where("isSignedIn", "==", true),
@@ -646,6 +653,23 @@ export default function KOTPanel({
   };
 
   const handleStoreOrder = async () => {
+     const dayStatusDoc = await getDoc(doc(db, "dayStatus", "1"));
+      const dayStatusData = dayStatusDoc.data();
+
+      if (!dayStatusData?.isStarted) {
+        alert("Day has not started yet");
+        return;
+      }
+      const cashierQuery = query(
+        collection(db, "cashierAttendance"),
+        where("isSignedIn", "==", true),
+        where("isOpen", "==", true)
+      );
+      const cashierSnapshot = await getDocs(cashierQuery);
+      if (cashierSnapshot.empty) {
+        alert("No active cashier. Please open a cashier first.");
+        return;
+      }
     if (kotItems.length === 0) {
       alert("Please add items before storing order");
       return;
@@ -1062,7 +1086,6 @@ export default function KOTPanel({
       // Calculate discount ratio for proportional pricing
       const discountRatio = subTotal > 0 ? total / subTotal : 1;
 
-      
       // ✅ Prepare KOT data
       const data = {
         kot_id: newKOTId,

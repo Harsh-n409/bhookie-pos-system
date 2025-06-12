@@ -7,14 +7,11 @@ import {
   query,
   where,
   doc,
-  deleteDoc,
   updateDoc,
   getDoc,
-  addDoc,
-  runTransaction,
   arrayUnion,
   serverTimestamp,
-  newDoc,
+  writeBatch,
   Timestamp,
 } from "firebase/firestore";
 import { db } from "../firebase/config";
@@ -32,14 +29,6 @@ export default function ManagerScreen() {
   const navigate = useNavigate(); // Initialize navigate
   const [activeTab, setActiveTab] = useState("Orders");
 
-  // Placeholder handlers for Start Day and End Day buttons
-  const handleStartDay = () => {
-    alert("Start Day clicked");
-  };
-
-  const handleEndDay = () => {
-    alert("End Day clicked");
-  };
   const [orders, setOrders] = useState([]);
   const [selectedItemInfo, setSelectedItemInfo] = useState(null);
   const [employees, setEmployees] = useState([]);
@@ -337,6 +326,14 @@ export default function ManagerScreen() {
 
       if (querySnapshot.empty) {
         setCashierStatus("Invalid employee ID.");
+        return;
+      }
+
+      const dayStatusDoc = await getDoc(doc(db, "dayStatus", "1"));
+      const dayStatusData = dayStatusDoc.data();
+
+      if (!dayStatusData?.isStarted) {
+        setCashierStatus("Day has not started.");
         return;
       }
 
@@ -764,13 +761,13 @@ export default function ManagerScreen() {
       console.error("Error fetching employees:", err);
     }
   };
-  const filteredEmployees = employees.filter(employee => {
-  const searchTerm = searchEmployeeTerm.toLowerCase();
-  return (
-    employee.name.toLowerCase().includes(searchTerm) ||
-    employee.employeeID.toLowerCase().includes(searchTerm)
-  );
-});
+  const filteredEmployees = employees.filter((employee) => {
+    const searchTerm = searchEmployeeTerm.toLowerCase();
+    return (
+      employee.name.toLowerCase().includes(searchTerm) ||
+      employee.employeeID.toLowerCase().includes(searchTerm)
+    );
+  });
 
   // In ManagerScreen component
   const fetchOrders = async () => {
@@ -1061,6 +1058,71 @@ export default function ManagerScreen() {
     const idB = b.kot_id || b.id || "";
     return sortOrderAsc ? idA.localeCompare(idB) : idB.localeCompare(idA);
   });
+
+  const startDay = async () => {
+    try {
+      const dayStatusRef = doc(db, "dayStatus", "1");
+      const dayStatusDoc = await getDoc(doc(db, "dayStatus", "1"));
+      const dayStatusData = dayStatusDoc.data();
+
+      if (dayStatusData?.isStarted) {
+        alert("Day has already started !");
+        return;
+      }
+      await setDoc(
+        dayStatusRef,
+        {
+          isStarted: true,
+        },
+        { merge: true }
+      );
+
+      alert("Day started successfully! .");
+    } catch (error) {
+      console.error("Failed to start day:", error);
+      alert(`Failed to start day: ${error.message}`);
+    }
+  };
+
+  const endDay = async () => {
+  try {
+    const dayStatusRef = doc(db, "dayStatus", "1");
+    const dayStatusDoc = await getDoc(dayStatusRef);
+    const dayStatusData = dayStatusDoc.data();
+
+    if (!dayStatusData?.isStarted) {
+      alert("Day has already ended");
+      return;
+    }
+
+    // 1. End the day
+    await setDoc(
+      dayStatusRef,
+      {
+        isStarted: false,
+      },
+      { merge: true }
+    );
+
+    // 2. Clear all documents from 'pendingOrders'
+    const pendingOrdersRef = collection(db, "pendingOrders");
+    const pendingOrdersSnapshot = await getDocs(pendingOrdersRef);
+
+    const batch = writeBatch(db);
+
+    pendingOrdersSnapshot.forEach((docSnap) => {
+      batch.delete(docSnap.ref);
+    });
+
+    await batch.commit();
+
+    alert("Day Ended successfully! All pending orders cleared.");
+  } catch (error) {
+    console.error("Failed to end day:", error);
+    alert(`Failed to end day: ${error.message}`);
+  }
+};
+
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -1469,13 +1531,13 @@ export default function ManagerScreen() {
             <h3 className="text-lg font-semibold mb-4">Day Control</h3>
             <div className="flex gap-4">
               <button
-                onClick={handleStartDay}
+                onClick={startDay}
                 className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
               >
                 Start Day
               </button>
               <button
-                onClick={handleEndDay}
+                onClick={endDay}
                 className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
               >
                 End Day
