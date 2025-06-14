@@ -24,6 +24,7 @@ export default function MenuGrid({
   const [showCustomizationPopup, setShowCustomizationPopup] = useState(false);
   const [customizationOptions, setCustomizationOptions] = useState([]);
   const [nextCustomization, setNextCustomization] = useState(null);
+  const [selectedCustomizations, setSelectedCustomizations] = useState({});
   const [customizationStep, setCustomizationStep] = useState(0); 
   const [selectedMeal, setSelectedMeal] = useState(null);
   const [categories, setCategories] = useState([]);
@@ -219,39 +220,51 @@ const ELIGIBLE_MEAL_KEYWORDS = [
 
 const handleItemClick = async (item) => {
   setSelectedItem(item);
-  setNextCustomization(null); // reset
+  setNextCustomization(null);
 
   try {
-    if (item.requiresCustomization && item.customizationCategory?.length) {
+    // Check if this is a meal that requires customization
+    const requiresBites = item.itemName.includes('Any Bites');
+    const requiresBurger = item.itemName.includes('Any Burger');
+    
+    if (requiresBites || requiresBurger) {
       const optionsByCategory = await Promise.all(
         item.customizationCategory.map(async (catId) => {
-          try {
-            const allItemsSnap = await getDocs(
-              query(collection(db, "items"), where("active", "==", true))
-            );
+          // Only process categories we actually need
+          if ((requiresBites && catId === 'cat01') || 
+              (requiresBurger && catId === 'cat05')) {
+            try {
+              const allItemsSnap = await getDocs(
+                query(collection(db, "items"), where("active", "==", true))
+              );
 
-            const filtered = allItemsSnap.docs
-              .map(doc => ({ id: doc.id, ...doc.data() }))
-              .filter(doc => {
-                const categoryField = doc.categoryId;
-                const actualCategoryId = typeof categoryField === "string"
-                  ? categoryField.trim()
-                  : categoryField?.id;
-                return actualCategoryId === catId.trim();
-              });
+              const filtered = allItemsSnap.docs
+                .map(doc => ({ id: doc.id, ...doc.data() }))
+                .filter(doc => {
+                  const categoryField = doc.categoryId;
+                  const actualCategoryId = typeof categoryField === "string"
+                    ? categoryField.trim()
+                    : categoryField?.id;
+                  return actualCategoryId === catId.trim();
+                });
 
-            return {
-              categoryId: catId.trim(),
-              options: filtered,
-            };
-          } catch (err) {
-            return { categoryId: catId.trim(), options: [] };
+              return {
+                categoryId: catId.trim(),
+                options: filtered,
+              };
+            } catch (err) {
+              return { categoryId: catId.trim(), options: [] };
+            }
           }
-        })
+          return null;
+        }).filter(Boolean)
       );
 
-      const cat01 = optionsByCategory.find(c => c.categoryId === "cat01" && c.options.length > 0);
-      const cat05 = optionsByCategory.find(c => c.categoryId === "cat05" && c.options.length > 0);
+      // Process the needed customizations
+      const cat01 = requiresBites ? 
+        optionsByCategory.find(c => c.categoryId === "cat01" && c.options.length > 0) : null;
+      const cat05 = requiresBurger ? 
+        optionsByCategory.find(c => c.categoryId === "cat05" && c.options.length > 0) : null;
 
       if (cat01) {
         setCustomizationOptions([cat01]);
@@ -259,7 +272,7 @@ const handleItemClick = async (item) => {
         setCustomizationStep(0);
         setShowCustomizationPopup(true);
 
-        if (cat05) setNextCustomization(cat05); // wait for user to select bites
+        if (cat05) setNextCustomization(cat05);
         return;
       }
 
@@ -280,6 +293,7 @@ const handleItemClick = async (item) => {
       quantity: 1,
     });
 
+    // Handle upgrades if applicable
     if (item.itemName.toLowerCase().includes("large")) return;
 
     const isBaseEligible = ELIGIBLE_BASE_ITEMS.includes(item.itemName.trim());
@@ -297,7 +311,6 @@ const handleItemClick = async (item) => {
     onAddItem({ id: item.id, name: item.itemName, price: item.price, quantity: 1 });
   }
 };
-
 
 
 // Helper function for upgrade pricing
@@ -320,60 +333,53 @@ const getUpgradeOptions = async (isMeal) => {
 const handleMealCustomization = (option, categoryId) => {
   if (!selectedMeal) return;
 
-  onAddItem({
-    id: selectedMeal.id,
-    name: selectedMeal.itemName,
-    price: selectedMeal.price,
-    quantity: 1,
-    customizations: {
-      [categoryId]: {
-        id: option.id,
-        name: option.itemName,
-        price: option.price || 0,
-      },
+  // ✅ Store customization into state
+  const updatedCustomizations = {
+    ...selectedCustomizations,
+    [categoryId]: {
+      id: option.id,
+      name: option.itemName,
+      price: option.price || 0,
     },
-  });
+  };
 
-  // CLOSE current (Bites) popup
-setShowCustomizationPopup(false);
+  setSelectedCustomizations(updatedCustomizations);
 
-if (nextCustomization) {
-  // Show Burger popup next
-  setCustomizationOptions([nextCustomization]);
-  setCustomizationStep(1);
-  setShowCustomizationPopup(true);
-  setNextCustomization(null);
-} else {
-  // All customizations done, now check for upgrade
-  const hasEligibleFries = ELIGIBLE_MEAL_KEYWORDS.some(
-    keyword => selectedMeal.itemName.includes(keyword)
-  );
-
-  if (hasEligibleFries) {
-    getUpgradeOptions(true).then(upgrades => {
-      if (upgrades.length > 0) {
-        setSelectedForUpgrade(selectedMeal);
-        setUpgradeOptions(upgrades);
-        setShowUpgradePopup(true);
-      }
-    });
-  }
-
-  setSelectedMeal(null); // reset
-}
-
-
-  // CLOSE current (Bites) popup
-  setShowCustomizationPopup(false);
-
-  // IF Burger step exists, open now
+  // ✅ If more customizations pending, show next popup
   if (nextCustomization) {
     setCustomizationOptions([nextCustomization]);
     setCustomizationStep(1);
     setShowCustomizationPopup(true);
     setNextCustomization(null);
   } else {
+    // ✅ All customizations done — now finally add the item once.
+    onAddItem({
+      id: selectedMeal.id,
+      name: selectedMeal.itemName,
+      price: selectedMeal.price,
+      quantity: 1,
+      customizations: updatedCustomizations,  // Store customizations
+    });
+
+    // ✅ Trigger upgrade logic as per original upgrade flow
+    const hasEligibleFries = ELIGIBLE_MEAL_KEYWORDS.some(keyword =>
+      selectedMeal.itemName.includes(keyword)
+    );
+
+    if (hasEligibleFries) {
+      getUpgradeOptions(true).then(upgrades => {
+        if (upgrades.length > 0) {
+          setSelectedForUpgrade(selectedMeal);
+          setUpgradeOptions(upgrades);
+          setShowUpgradePopup(true);
+        }
+      });
+    }
+
+    // ✅ Reset after adding
     setSelectedMeal(null);
+    setShowCustomizationPopup(false);
+    setSelectedCustomizations({});
   }
 };
 

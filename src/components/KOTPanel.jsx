@@ -197,6 +197,16 @@ const cleanItemName = (name) => {
     ?.trim();                                       // trim edges
 };
 
+// clean name while printing
+const getCleanMealName = (name) => {
+  return name
+    .replace(/\([^)]*\)/g, '') // Remove anything in parentheses
+    .replace(/\b(regular|large|medium)\b/gi, '') // Remove sizes
+    .replace(/\s+/g, ' ') // Collapse multiple spaces
+    .trim();
+};
+
+
 
   const updateInventory = async (kotItems) => {
     try {
@@ -1153,147 +1163,129 @@ const cleanItemName = (name) => {
       const orderIdLastThree = fullOrderId.slice(-3);
       const highlightedOrderId = `${orderIdPrefix}<span style="color: red; font-weight: bold;">${orderIdLastThree}</span>`;
 
-      const printContent = `
-  <div style="
-    width: 280px;
-    font-family: 'Courier New', monospace;
-    font-size: 12px;
-    color: #000;
-    padding: 5px;
-  ">
-      <div style="text-align: center; margin-bottom: 5px;">
-        <img src="/logo192.png" alt="Logo" style="max-width: 100px; margin-bottom: 10px;" />
+      const insertBreaks = (str) => {
+  return str.replace(/\+/g, '+<wbr>');
+};
 
-      <h3 style="text-align: center; margin: 0; padding: 5px 0;">Order</h3>
-      </div>
-      <div style="text-align: left; margin-top: 10px;">
-      <div style="display: flex; justify-content: space-between;">
-        <span><strong>Order ID:</strong></span>
-        <span>${highlightedOrderId}</span>
-      </div>
-      <div style="display: flex; justify-content: space-between;">
-        <span><strong>Cashier:</strong></span>
-        <span>${cashierName} (${cashierId})</span>
-      </div>
-      <div style="display: flex; justify-content: space-between;">
-        <span><strong>Order Type:</strong></span>
-        <span>${orderType === "dine-in" ? "Dine In" : "Takeaway"}</span>
-      </div>
-      <div style="display: flex; justify-content: space-between;">
-        <span><strong>Time:</strong></span>
-        <span>${new Date().toLocaleString()}</span>
-      </div>
 
-    ${
-      customerId
-        ? `<div style="display: flex; justify-content: space-between;">
-            <span><strong>${
-              isEmployee ? "Employee" : "Customer"
-            }:</strong></span>
-            <span>${customerName} (${customerId})</span>
-          </div>`
-        : ""
-    }
-
-    ${
-      isEmployee
-        ? `<div style="display: flex; justify-content: space-between;">
-            <span><strong>Meal Credits Used:</strong></span>
-            <span>£${creditsUsed.toFixed(2)}</span>
-          </div>
-          ${
-            cashDue > 0
-              ? `<div style="display: flex; justify-content: space-between;">
-                  <span><strong>Cash Due:</strong></span>
-                  <span>£${cashDue.toFixed(2)}</span>
-                </div>`
-              : ""
-          }`
-        : ""
-    }
-
-    <hr style="border: none; border-top: 1px dashed #000; margin: 6px 0;" />
-
- 
-<table style="width: 100%; border-collapse: collapse;">
-  <thead>
-    <tr>
-      <th style="text-align: left; border-bottom: 1px dashed #000;">Item</th>
-      <th style="text-align: center; border-bottom: 1px dashed #000;">Qty</th>
-      <th style="text-align: right; border-bottom: 1px dashed #000;">Price</th>
-    </tr>
-  </thead>
-  <tbody>
-    ${kotItems.map((item, index) => {
-      const isUpgrade = item.isUpgrade;
-      if (isUpgrade) return '';
-      
-      const upgrade = kotItems.find(i => i.parentItem === item.id && i.isUpgrade);
-      let rows = `
-        <tr>
-          <td style="padding: 2px 0;">${item.name}</td>
-          <td style="text-align: center;">${item.quantity}</td>
-          <td style="text-align: right;">£${item.price.toFixed(2)}</td>
-        </tr>`;
-      
-      if (upgrade) {
-        rows += `
-        <tr>
-          <td style="padding: 2px 0; font-size: 11px; color: #555;">
-            ↑ ${item.name} Upgraded to ${upgrade.itemName.replace('Upgrade to ', '')}
-          </td>
-          <td style="text-align: center;"></td>
-          <td style="text-align: right;">+£${upgrade.price.toFixed(2)}</td>
-        </tr>
-        <tr>
-         <td style="padding: 2px 0; font-weight: bold;">
-  Total for ${cleanItemName(item.name)}
-</td>
-
-          <td style="text-align: center;"></td>
-          <td style="text-align: right;">= £${(item.price + upgrade.price).toFixed(2)}</td>
-        </tr>`;
+     for (let i = 0; i < kotItems.length; i++) {
+  const item = kotItems[i];
+  
+  if (item.categoryId === 'meals') {
+    try {
+      const itemRef = doc(db, "inventory", item.id);
+      const itemSnap = await getDoc(itemRef);
+      if (itemSnap.exists()) {
+        kotItems[i].itemNameForPrint = itemSnap.data().itemName; 
+      } else {
+        kotItems[i].itemNameForPrint = item.name;
       }
-      return rows;
-    }).join('')}
-  </tbody>
-</table>
-    <hr style="border: none; border-top: 1px dashed #000; margin: 6px 0;" />
-
-    <div style="display: flex; justify-content: space-between;">
-      <span><strong>Sub Total:</strong></span>
-      <span>£${subTotal.toFixed(2)}</span>
-    </div>
-    <div style="display: flex; justify-content: space-between;">
-      <span><strong>Discount:</strong></span>
-      <span>£${
-        isEmployee ? creditsUsed.toFixed(2) : (subTotal - total).toFixed(2)
-      }</span>
-    </div>
-    <div style="display: flex; justify-content: space-between;">
-      <span><strong>Total:</strong></span>
-      <span>£${total.toFixed(2)}</span>
-    </div>
-
-    ${
-      customerId && !isEmployee && discount > 0
-        ? `<p style="color: green;"> Discount applied: £${pointsToDeduct.toFixed(
-            2
-          )} (Remaining Points: ${updatedPoints})</p>`
-        : ""
+    } catch (err) {
+      console.error("Error fetching meal name:", err);
+      kotItems[i].itemNameForPrint = item.name;
     }
-
-    ${
-      customerId && !isEmployee
-        ? `<p><strong>Earned Points:</strong> ${earnedPoints}</p>`
-        : ""
+  } else {
+    try {
+      const itemRef = doc(db, "inventory", item.id);
+      const itemSnap = await getDoc(itemRef);
+      if (itemSnap.exists()) {
+        kotItems[i].dbItemName = itemSnap.data().itemName;
+      } else {
+        kotItems[i].dbItemName = item.name;
+      }
+    } catch (err) {
+      console.error("Error fetching item name:", err);
+      kotItems[i].dbItemName = item.name;
     }
+  }
+}
 
-    <hr style="border: none; border-top: 1px dashed #000; margin: 6px 0;" />
 
-    <p style="text-align: center;">--- Thank You ---</p>
+      
+const printContent = `
+<div style="width: 400px; font-family: 'Courier New', monospace; font-size: 12px; color: #000; padding: 5px; margin: 0 auto; page-break-inside: avoid;">
+  <div style="text-align: center; margin-bottom: 5px;">
+    <img src="/logo192.png" alt="Logo" style="max-width: 100px; margin-bottom: 10px;">
+    <h3 style="text-align: center; margin: 0; padding: 5px 0;">Order</h3>
   </div>
-`;
+
+  <table style="width: 100%; font-size: 12px; margin-top: 10px;">
+    <tr><td style="width: 40%;"><strong>Order ID:</strong></td><td style="width: 60%; text-align: right;">${highlightedOrderId}</td></tr>
+    <tr><td><strong>Cashier:</strong></td><td style="text-align: right;">${cashierName} (${cashierId})</td></tr>
+    <tr><td><strong>Order Type:</strong></td><td style="text-align: right;">${orderType === "dine-in" ? "Dine In" : "Takeaway"}</td></tr>
+    <tr><td><strong>Time:</strong></td><td style="text-align: right;">${new Date().toLocaleString()}</td></tr>
+    ${customerId ? `<tr><td><strong>${isEmployee ? "Employee" : "Customer"}:</strong></td><td style="text-align: right;">${customerName} (${customerId})</td></tr>` : ''}
+  </table>
+
+  <hr style="border: none; border-top: 1px dashed #000; margin: 10px 0;">
+
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 5px;">
+    <thead>
+      <tr>
+        <th style="width: 60%; text-align: left; border-bottom: 1px dashed #000;">Item</th>
+        <th style="width: 15%; text-align: center; border-bottom: 1px dashed #000;">Qty</th>
+        <th style="width: 25%; text-align: right; border-bottom: 1px dashed #000;">Price</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${kotItems.map((item, index) => {
+        if (item.isUpgrade) return '';
+        const upgrade = kotItems.find(i => i.parentItem === item.id && i.isUpgrade);
+        const upgradePrice = upgrade ? upgrade.price : 0;
+
+      let totalForName = "";
+
+if (item.categoryId === 'meals') {
+  totalForName = "Meals";
+} else {
+  if (upgrade) {
+    totalForName = cleanItemName(item.name);
+  } else {
+    totalForName = item.dbItemName;
+  }
+}
+
+
+        return `
+        <tr><td colspan="3" style="border-top: 1px dashed #000; padding-top: 5px;"></td></tr>
+        <tr><td style="padding: 2px 0; word-break: break-word;">${item.name}</td>
+            <td style="text-align: center;">${item.quantity}</td>
+            <td style="text-align: right;">£${item.price.toFixed(2)}</td></tr>
+
+        ${item.customizations ? `<tr><td colspan="3" style="font-size: 11px; color: #555; padding-left: 10px;">
+            ${item.customizations['cat05'] ? `<strong>Burger:</strong> ${item.customizations['cat05'].name}` : ''}
+            ${item.customizations['cat01'] ? `${item.customizations['cat05'] ? ' • ' : ''}<strong>Bites:</strong> ${item.customizations['cat01'].name}` : ''}
+        </td></tr>` : ''}
+
+        ${upgrade ? `<tr><td colspan="3" style="font-size: 11px; color: #555; font-style: italic; padding-left: 10px;">↑ ${item.name} upgraded to ${upgrade.itemName.replace('Upgrade to ', '')}</td></tr>
+        <tr><td></td><td style="text-align: center;"></td><td style="text-align: right;">+£${upgradePrice.toFixed(2)}</td></tr>` : ''}
+
+     <tr>
+  <td colspan="2" style="font-weight: bold; padding-bottom: 5px; word-break: break-word; white-space: normal; overflow-wrap: anywhere;">
+    ${item.categoryId === 'meals' ? 'Total for Meals' : `Total for ${insertBreaks(totalForName)}`}
+  </td>
+  <td style="text-align: right; font-weight: bold;">£${(item.price + upgradePrice).toFixed(2)}</td>
+</tr>
+
+
+        <tr><td colspan="3" style="border-bottom: 1px dashed #000; padding-bottom: 5px;"></td></tr>`;
+      }).join('')}
+    </tbody>
+  </table>
+
+  <hr style="border: none; border-top: 1px dashed #000; margin: 10px 0;">
+
+  <table style="width: 100%; font-size: 14px; margin-top: 5px; font-weight: bold;">
+    <tr><td style="width: 60%;">Sub Total:</td><td style="width: 40%; text-align: right;">£${subTotal.toFixed(2)}</td></tr>
+    ${appliedOffers.map(offer => `<tr><td style="color: red;">${offer.name} Discount:</td><td style="text-align: right; color: red;">-£${offer.discountAmount.toFixed(2)}</td></tr>`).join('')}
+    <tr><td>Discount:</td><td style="text-align: right;">-£${discount.toFixed(2)}</td></tr>
+    <tr><td><strong>Total:</strong></td><td style="text-align: right;"><strong>£${total.toFixed(2)}</strong></td></tr>
+  </table>
+
+  <hr style="border: none; border-top: 1px dashed #000; margin: 10px 0;">
+  <p style="text-align: center;">--- Thank You ---</p>
+</div>`;
+
 
       const printWindow = window.open("", "_blank");
       if (printWindow) {
@@ -1395,74 +1387,86 @@ const cleanItemName = (name) => {
 
       <div className="border p-3 rounded mb-3 bg-white flex flex-col max-h-[300px]">
         <div className="overflow-y-auto flex-1 mb-3">
-          <table className="w-full text-left mb-3">
-            <thead>
-              <tr>
-                <th>ITEM</th>
-                <th>QUANTITY</th>
-                <th>PRICE</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {kotItems.map((item, index) => (
-                <tr key={index}>
-                  <td>
-                    {item.name}
-                    {item.sauces?.length > 0 && (
-                      <div className="text-sm text-gray-500">
-                        {item.sauces.join(", ")}
-                      </div>
-                    )}
-                  </td>
-                  <td>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => {
-                          const updated = [...kotItems];
-                          updated[index].quantity = Math.max(
-                            updated[index].quantity - 1,
-                            1
-                          );
-                          setKotItems(updated);
-                          updateTotals(updated);
-                        }}
-                        className="bg-gray-300 text-xl w-6 h-6 rounded-full flex items-center justify-center"
-                      >
-                        -
-                      </button>
-                      <button
-                        onClick={() => openNumberPad(index)}
-                        className="bg-gray-100 text-xl w-6 h-6 rounded-full flex items-center justify-center"
-                      >
-                        {item.quantity}
-                      </button>
-                      <button
-                        onClick={() => {
-                          const updated = [...kotItems];
-                          updated[index].quantity += 1;
-                          setKotItems(updated);
-                          updateTotals(updated);
-                        }}
-                        className="bg-gray-300 text-xl w-6 h-6 rounded-full flex items-center justify-center"
-                      >
-                        +
-                      </button>
-                    </div>
-                  </td>
-                  <td>£{(item.quantity * item.price).toFixed(2)}</td>
-                  <td>
-                    <button
-                      onClick={() => handleRemoveItem(index)}
-                      className="text-red-600"
-                    >
-                      ❌
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+<table className="w-full text-left mb-3">
+  <thead>
+    <tr>
+      <th>ITEM</th>
+      <th>QUANTITY</th>
+      <th>PRICE</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {kotItems.map((item, index) => (
+      <tr key={index}>
+        <td>
+       
+          <div>{item.name}</div>
+          
+       
+          {item.customizations && (
+            <div className="text-sm text-gray-500">
+              {item.customizations['cat05'] && `${item.customizations['cat05'].name}`}
+              {item.customizations['cat01'] && `${item.customizations['cat05'] ? ' • ' : ''}${item.customizations['cat01'].name}`}
+            </div>
+          )}
+          
+          
+          {item.sauces?.length > 0 && (
+            <div className="text-sm text-gray-500">
+              {item.sauces.join(", ")}
+            </div>
+          )}
+        </td>
+      
+        <td>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                const updated = [...kotItems];
+                updated[index].quantity = Math.max(
+                  updated[index].quantity - 1,
+                  1
+                );
+                setKotItems(updated);
+                updateTotals(updated);
+              }}
+              className="bg-gray-300 text-xl w-6 h-6 rounded-full flex items-center justify-center"
+            >
+              -
+            </button>
+            <button
+              onClick={() => openNumberPad(index)}
+              className="bg-gray-100 text-xl w-6 h-6 rounded-full flex items-center justify-center"
+            >
+              {item.quantity}
+            </button>
+            <button
+              onClick={() => {
+                const updated = [...kotItems];
+                updated[index].quantity += 1;
+                setKotItems(updated);
+                updateTotals(updated);
+              }}
+              className="bg-gray-300 text-xl w-6 h-6 rounded-full flex items-center justify-center"
+            >
+              +
+            </button>
+          </div>
+        </td>
+        <td>£{(item.quantity * item.price).toFixed(2)}</td>
+        <td>
+          <button
+            onClick={() => handleRemoveItem(index)}
+            className="text-red-600"
+          >
+            ❌
+          </button>
+        </td>
+      </tr>
+    ))}
+  </tbody>
+</table>
         </div>
 
         <div>
