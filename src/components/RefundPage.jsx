@@ -73,10 +73,19 @@ export default function RefundPage() {
       }
 
       const snapshot = await getDocs(q);
-      const data = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+      const data = snapshot.docs.map((doc) => {
+        const orderData = doc.data();
+        return {
+          id: doc.id,
+          ...orderData,
+          // Ensure backward compatibility
+          items: orderData.items.map((item) => ({
+            ...item,
+            // Fallback to original price if effectivePrice doesn't exist
+            effectivePrice: item.effectivePrice || item.price,
+          })),
+        };
+      });
       setOrders(data);
     } catch (err) {
       console.error("Error fetching orders:", err);
@@ -86,47 +95,105 @@ export default function RefundPage() {
   const startRefund = (order) => {
     setIsRefundMode(true);
     setOriginalOrder(order);
-    setRefundedItems(
-      order.items.map((item) => ({
+
+    // Group items by offer
+    const itemsByOffer = {};
+    const standaloneItems = [];
+
+    order.items.forEach((item) => {
+      if (item.isOfferItem && item.offerId) {
+        if (!itemsByOffer[item.offerId]) {
+          itemsByOffer[item.offerId] = [];
+        }
+        itemsByOffer[item.offerId].push(item);
+      } else {
+        standaloneItems.push(item);
+      }
+    });
+
+    // Create refundable units
+    const refundableUnits = [
+      ...standaloneItems.map((item) => ({
         ...item,
+        type: "item",
         remainingQuantity: item.quantity - (item.refundedQuantity || 0),
         refundQuantity: 0,
-      }))
-    );
-  };
+      })),
+    ];
 
+    // Add offer groups
+    Object.entries(itemsByOffer).forEach(([offerId, items]) => {
+      const minRefundable = Math.min(
+        ...items.map((i) => i.quantity - (i.refundedQuantity || 0))
+      );
+
+      refundableUnits.push({
+        id: `offer-${offerId}`,
+        name: `Offer: ${items[0].offerName || offerId}`, // Use offer name if available
+        type: "offer",
+        offerId,
+        items,
+        remainingQuantity: minRefundable,
+        refundQuantity: 0,
+        effectivePrice: items.reduce(
+          (sum, item) => sum + (item.effectivePrice || item.price),
+          0
+        ),
+      });
+    });
+
+    setRefundedItems(refundableUnits);
+  };
   const processRefund = async () => {
     if (!originalOrder) return;
 
     setIsProcessing(true);
     try {
-      // Validate refund quantities
       const hasRefund = refundedItems.some((item) => item.refundQuantity > 0);
       if (!hasRefund) {
         alert("Please select items to refund");
         return;
       }
 
-      // Create refund transaction
+      // Prepare refund data
       const refundData = {
         originalOrderId: originalOrder.id,
         date: Timestamp.now(),
-        items: refundedItems
-          .filter((item) => item.refundQuantity > 0)
-          .map((item) => ({
-            id: item.id,
-            name: item.name,
-            price: item.price,
-            quantity: item.refundQuantity,
-          })),
-        refundAmount: refundedItems.reduce(
-          (sum, item) => sum + item.price * item.refundQuantity,
-          0
-        ),
+        items: [],
+        refundAmount: 0,
         processedBy: originalOrder.cashierName,
       };
 
-      // Update KOT document first
+      // Process refund units
+      refundedItems.forEach((unit) => {
+        if (unit.refundQuantity > 0) {
+          if (unit.type === "offer") {
+            unit.items.forEach((item) => {
+              refundData.items.push({
+                id: item.id,
+                name: item.name,
+                price: item.effectivePrice || item.price,
+                quantity: unit.refundQuantity,
+                isOfferItem: true,
+                offerId: unit.offerId,
+              });
+              refundData.refundAmount +=
+                (item.effectivePrice || item.price) * unit.refundQuantity;
+            });
+          } else {
+            refundData.items.push({
+              id: unit.id,
+              name: unit.name,
+              price: unit.effectivePrice || unit.price,
+              quantity: unit.refundQuantity,
+            });
+            refundData.refundAmount +=
+              (unit.effectivePrice || unit.price) * unit.refundQuantity;
+          }
+        }
+      });
+
+      // Update KOT document
       const kotRef = doc(db, "KOT", originalOrder.id);
       await runTransaction(db, async (transaction) => {
         const kotDoc = await transaction.get(kotRef);
@@ -137,39 +204,42 @@ export default function RefundPage() {
         const kotData = kotDoc.data();
         const updatedItems = [...kotData.items];
         let totalRefundedAmount = 0;
-        let isFullyRefunded = true;
 
-        // Update items with refund quantities
-        refundedItems.forEach((refundItem) => {
-          if (refundItem.refundQuantity > 0) {
-            const originalItemIndex = updatedItems.findIndex(
-              (item) => item.id === refundItem.id
-            );
+        refundedItems.forEach((unit) => {
+          if (unit.refundQuantity > 0) {
+            if (unit.type === "offer") {
+              unit.items.forEach((item) => {
+                const index = updatedItems.findIndex((i) => i.id === item.id);
+                if (index !== -1) {
+                  const newQty =
+                    (updatedItems[index].refundedQuantity || 0) +
+                    unit.refundQuantity;
+                  updatedItems[index].refundedQuantity = newQty;
+                  updatedItems[index].refunded =
+                    newQty === updatedItems[index].quantity;
 
-            if (originalItemIndex !== -1) {
-              // Calculate new refunded quantity (previous + current)
-              const newRefundedQuantity =
-                (updatedItems[originalItemIndex].refundedQuantity || 0) +
-                refundItem.refundQuantity;
+                  totalRefundedAmount +=
+                    (item.effectivePrice || item.price) * unit.refundQuantity;
+                }
+              });
+            } else {
+              const index = updatedItems.findIndex((i) => i.id === unit.id);
+              if (index !== -1) {
+                const newQty =
+                  (updatedItems[index].refundedQuantity || 0) +
+                  unit.refundQuantity;
+                updatedItems[index].refundedQuantity = newQty;
+                updatedItems[index].refunded =
+                  newQty === updatedItems[index].quantity;
 
-              // Update refund quantities
-              updatedItems[originalItemIndex].refundedQuantity =
-                newRefundedQuantity;
-
-              // Check if fully refunded
-              updatedItems[originalItemIndex].refunded =
-                newRefundedQuantity ===
-                updatedItems[originalItemIndex].quantity;
-
-              // Calculate refund amount
-              const itemRefundAmount =
-                refundItem.price * refundItem.refundQuantity;
-              totalRefundedAmount += itemRefundAmount;
+                totalRefundedAmount +=
+                  (unit.effectivePrice || unit.price) * unit.refundQuantity;
+              }
             }
           }
         });
 
-        isFullyRefunded = updatedItems.every(
+        const isFullyRefunded = updatedItems.every(
           (item) => (item.refundedQuantity || 0) === item.quantity
         );
 
@@ -181,82 +251,73 @@ export default function RefundPage() {
       });
 
       // Update inventory
-      for (const item of refundedItems) {
-        if (item.refundQuantity > 0) {
-          const itemRef = doc(db, "inventory", item.id);
-          await updateDoc(itemRef, {
-            totalStockOnHand: increment(item.refundQuantity),
-          });
+      for (const unit of refundedItems) {
+        if (unit.refundQuantity > 0) {
+          if (unit.type === "offer") {
+            for (const item of unit.items) {
+              const itemRef = doc(db, "inventory", item.id);
+              await updateDoc(itemRef, {
+                totalStockOnHand: increment(unit.refundQuantity),
+              });
+            }
+          } else {
+            const itemRef = doc(db, "inventory", unit.id);
+            await updateDoc(itemRef, {
+              totalStockOnHand: increment(unit.refundQuantity),
+            });
+          }
         }
       }
 
-      // Reverse loyalty points for customers
+      // Reverse loyalty points
       if (originalOrder.customerID && !originalOrder.isEmployee) {
         const customerQuery = query(
           collection(db, "customers"),
           where("customerID", "==", originalOrder.customerID)
         );
-        const customerSnapshot = await getDocs(customerQuery);
-
-        if (!customerSnapshot.empty) {
-          const customerDoc = customerSnapshot.docs[0];
-          const customerRef = doc(db, "customers", customerDoc.id);
-          const customerData = customerDoc.data();
-
-          // Calculate total points to deduct
+        const snapshot = await getDocs(customerQuery);
+        if (!snapshot.empty) {
+          const docRef = snapshot.docs[0].ref;
           let totalPointsToDeduct = 0;
-          refundedItems.forEach((item) => {
-            if (item.refundQuantity > 0) {
-              const pointsToDeduct = Math.floor(
-                originalOrder.earnedPoints *
-                  (item.refundQuantity / item.quantity)
+
+          refundedItems.forEach((unit) => {
+            if (unit.refundQuantity > 0) {
+              const itemQty = unit.quantity || 1;
+              totalPointsToDeduct += Math.floor(
+                originalOrder.earnedPoints * (unit.refundQuantity / itemQty)
               );
-              totalPointsToDeduct += pointsToDeduct;
             }
           });
 
-          await updateDoc(customerRef, {
+          await updateDoc(docRef, {
             points: increment(-totalPointsToDeduct),
           });
-        } else {
-          console.warn(
-            "Customer document not found for ID:",
-            originalOrder.customerID
-          );
         }
       }
 
-      // Reverse meal credits for employees
+      // Reverse meal credits
       if (originalOrder.isEmployee && originalOrder.employeeId) {
-        const employeeQuery = query(
+        const empQuery = query(
           collection(db, "users_01"),
           where("employeeID", "==", originalOrder.employeeId)
         );
-        const employeeSnapshot = await getDocs(employeeQuery);
+        const snapshot = await getDocs(empQuery);
+        if (!snapshot.empty) {
+          const empDoc = snapshot.docs[0];
+          const mealRef = doc(db, "users_01", empDoc.id, "meal", "1");
 
-        if (!employeeSnapshot.empty) {
-          const employeeDoc = employeeSnapshot.docs[0];
-          const mealRef = doc(db, "users_01", employeeDoc.id, "meal", "1");
-
-          // Calculate total credits to restore
           let totalCreditsToRestore = 0;
-          refundedItems.forEach((item) => {
-            if (item.refundQuantity > 0) {
-              const creditsToRestore =
-                originalOrder.creditsUsed *
-                (item.refundQuantity / item.quantity);
-              totalCreditsToRestore += creditsToRestore;
+          refundedItems.forEach((unit) => {
+            if (unit.refundQuantity > 0) {
+              const itemQty = unit.quantity || 1;
+              totalCreditsToRestore +=
+                originalOrder.creditsUsed * (unit.refundQuantity / itemQty);
             }
           });
 
           await updateDoc(mealRef, {
             mealCredits: increment(totalCreditsToRestore),
           });
-        } else {
-          console.warn(
-            "Employee document not found for ID:",
-            originalOrder.employeeId
-          );
         }
       }
 
@@ -267,7 +328,7 @@ export default function RefundPage() {
       setIsRefundMode(false);
       setOriginalOrder(null);
       setRefundedItems([]);
-      fetchOrders(); // Refresh orders list
+      fetchOrders();
     } catch (error) {
       console.error("Refund failed:", error);
       alert(`Refund processing failed: ${error.message}`);
@@ -298,7 +359,7 @@ export default function RefundPage() {
         // Create updated items array with full refund quantities
         const updatedItems = kotData.items.map((item) => {
           const remainingQty = item.quantity - (item.refundedQuantity || 0);
-          refundAmount += remainingQty * item.price;
+          refundAmount += remainingQty * item.effectivePrice;
 
           return {
             ...item,
@@ -387,6 +448,178 @@ export default function RefundPage() {
       setIsProcessing(false);
     }
   };
+
+  const refundEntireOffer = async (order) => {
+  if (!order) return;
+  
+  // Find all offers in the order
+  const offersInOrder = {};
+  order.items.forEach(item => {
+    if (item.associatedOffer) {
+      if (!offersInOrder[item.associatedOffer]) {
+        offersInOrder[item.associatedOffer] = {
+          items: [],
+          minRefundable: Infinity
+        };
+      }
+      offersInOrder[item.associatedOffer].items.push(item);
+      const remaining = item.quantity - (item.refundedQuantity || 0);
+      if (remaining < offersInOrder[item.associatedOffer].minRefundable) {
+        offersInOrder[item.associatedOffer].minRefundable = remaining;
+      }
+    }
+  });
+
+  // Check if there are any refundable offers
+  const refundableOffers = Object.values(offersInOrder).filter(
+    offer => offer.minRefundable > 0
+  );
+
+  if (refundableOffers.length === 0) {
+    alert("No complete offers available for refund");
+    return;
+  }
+
+  const confirmRefund = window.confirm(
+    "Are you sure you want to refund all complete offers? Partial offers cannot be refunded."
+  );
+  if (!confirmRefund) return;
+
+  setIsProcessing(true);
+
+  try {
+    const kotRef = doc(db, "KOT", order.id);
+
+    await runTransaction(db, async (transaction) => {
+      const kotSnap = await transaction.get(kotRef);
+      if (!kotSnap.exists()) throw new Error("Order no longer exists.");
+
+      const kotData = kotSnap.data();
+      const updatedItems = [...kotData.items];
+      let totalRefundAmount = 0;
+
+      // Process each offer
+      refundableOffers.forEach(offer => {
+        const refundQty = offer.minRefundable;
+        
+        offer.items.forEach(offerItem => {
+          const itemIndex = updatedItems.findIndex(
+            item => item.id === offerItem.id
+          );
+          
+          if (itemIndex !== -1) {
+            // Calculate new refunded quantity
+            const newRefundedQuantity = 
+              (updatedItems[itemIndex].refundedQuantity || 0) + refundQty;
+            
+            // Update item
+            updatedItems[itemIndex] = {
+              ...updatedItems[itemIndex],
+              refundedQuantity: newRefundedQuantity,
+              refunded: newRefundedQuantity === updatedItems[itemIndex].quantity
+            };
+
+            // Add to refund amount
+            totalRefundAmount += 
+              (offerItem.effectivePrice || offerItem.price) * refundQty;
+          }
+        });
+      });
+
+      // Update KOT document
+      transaction.update(kotRef, {
+        items: updatedItems,
+        refundedAmount: (kotData.refundedAmount || 0) + totalRefundAmount,
+        // Don't mark entire order as refunded unless all items are refunded
+        refunded: updatedItems.every(item => item.refunded)
+      });
+
+      // Restock inventory
+      refundableOffers.forEach(offer => {
+        const refundQty = offer.minRefundable;
+        offer.items.forEach(item => {
+          const itemRef = doc(db, "inventory", item.id);
+          transaction.update(itemRef, {
+            totalStockOnHand: increment(refundQty)
+          });
+        });
+      });
+
+      // Reverse loyalty points for customers
+      if (kotData.earnedPoints && kotData.customerID && !kotData.isEmployee) {
+        const customerQuery = query(
+          collection(db, "customers"),
+          where("customerID", "==", kotData.customerID)
+        );
+        const customerSnapshot = await getDocs(customerQuery);
+
+        if (!customerSnapshot.empty) {
+          const customerDoc = customerSnapshot.docs[0];
+          const customerRef = doc(db, "customers", customerDoc.id);
+          
+          // Calculate points to deduct proportionally
+          const pointsRatio = totalRefundAmount / kotData.amount;
+          const pointsToDeduct = Math.floor(kotData.earnedPoints * pointsRatio);
+          
+          transaction.update(customerRef, {
+            points: increment(-pointsToDeduct)
+          });
+        }
+      }
+
+      // Reverse employee credits
+      if (kotData.creditsUsed && kotData.isEmployee && kotData.employeeId) {
+        const employeeQuery = query(
+          collection(db, "users_01"),
+          where("employeeID", "==", kotData.employeeId)
+        );
+        const employeeSnapshot = await getDocs(employeeQuery);
+
+        if (!employeeSnapshot.empty) {
+          const employeeDoc = employeeSnapshot.docs[0];
+          const mealRef = doc(db, "users_01", employeeDoc.id, "meal", "1");
+          
+          // Calculate credits to restore proportionally
+          const creditsRatio = totalRefundAmount / kotData.amount;
+          const creditsToRestore = kotData.creditsUsed * creditsRatio;
+          
+          transaction.update(mealRef, {
+            mealCredits: increment(creditsToRestore)
+          });
+        }
+      }
+
+      // Create refund record
+      const refundData = {
+        originalOrderId: order.id,
+        date: Timestamp.now(),
+        items: refundableOffers.flatMap(offer => 
+          offer.items.map(item => ({
+            id: item.id,
+            name: item.name,
+            price: item.effectivePrice || item.price,
+            quantity: offer.minRefundable,
+            associatedOffer: item.associatedOffer
+          }))
+        ),
+        refundAmount: totalRefundAmount,
+        processedBy: order.cashierName,
+        refundType: "offer-only"
+      };
+
+      const refundRef = doc(collection(db, "refunds"));
+      transaction.set(refundRef, refundData);
+    });
+
+    alert("All complete offers refunded successfully!");
+    fetchOrders(); // Refresh orders list
+  } catch (error) {
+    console.error("Offer refund failed:", error);
+    alert(`Offer refund failed: ${error.message}`);
+  } finally {
+    setIsProcessing(false);
+  }
+};
 
   const filteredOrders = orders.filter((order) => {
     const query = searchTerm.toLowerCase();
@@ -526,44 +759,103 @@ export default function RefundPage() {
                       <th className="p-2">Already Refunded</th>
                       <th className="p-2">Remaining</th>
                       <th className="p-2">Refund Qty</th>
+                      {/* Added Effective Price column */}
+                      <th className="p-2">Effective Price</th>
                       <th className="p-2">Refund Amount</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {refundedItems.map((item, index) => (
-                      <tr key={index} className="border-b hover:bg-gray-50">
-                        <td className="p-2">{item.name}</td>
-                        <td className="p-2 text-center">{item.quantity}</td>
-                        <td className="p-2 text-center">
-                          {item.refundedQuantity || 0}
-                        </td>
-                        <td className="p-2 text-center">
-                          {item.remainingQuantity}
-                        </td>
-                        <td className="p-2 text-center">
-                          <input
-                            type="number"
-                            min="0"
-                            max={item.remainingQuantity}
-                            value={item.refundQuantity}
-                            onChange={(e) => {
-                              const updated = [...refundedItems];
-                              const newValue = parseInt(e.target.value || 0);
-                              updated[index].refundQuantity = Math.min(
-                                Math.max(newValue, 0),
-                                item.remainingQuantity
-                              );
-                              setRefundedItems(updated);
-                            }}
-                            className="w-16 border p-1 text-center"
-                            disabled={item.remainingQuantity === 0}
-                          />
-                        </td>
-                        <td className="p-2 text-center">
-                          £{(item.price * item.refundQuantity).toFixed(2)}
-                        </td>
-                      </tr>
-                    ))}
+                    {refundedItems.map((item, index) => {
+                      if (item.type === "offer") {
+                        return (
+                          <tr
+                            key={index}
+                            className="border-b hover:bg-gray-50 bg-yellow-50"
+                          >
+                            <td className="p-2 font-semibold" colSpan={4}>
+                              {item.name} (Combo)
+                            </td>
+                            <td className="p-2 text-center">
+                              <input
+                                type="number"
+                                min="0"
+                                max={item.remainingQuantity}
+                                value={item.refundQuantity}
+                                onChange={(e) => {
+                                  const updated = [...refundedItems];
+                                  const newValue = Math.min(
+                                    Math.max(parseInt(e.target.value || 0), 0),
+                                    item.remainingQuantity
+                                  );
+                                  updated[index].refundQuantity = newValue;
+                                  setRefundedItems(updated);
+                                }}
+                                className="w-16 border p-1 text-center"
+                                disabled={item.remainingQuantity === 0}
+                              />
+                            </td>
+                            <td className="p-2 text-center">
+                              £
+                              {item.effectivePrice?.toFixed(2) ||
+                                item.price.toFixed(2)}
+                            </td>
+                            <td className="p-2 text-center">
+                              £
+                              {(
+                                (item.effectivePrice || item.price) *
+                                item.refundQuantity
+                              ).toFixed(2)}
+                            </td>
+                          </tr>
+                        );
+                      } else {
+                        return (
+                          <tr key={index} className="border-b hover:bg-gray-50">
+                            <td className="p-2">{item.name}</td>
+                            <td className="p-2 text-center">{item.quantity}</td>
+                            <td className="p-2 text-center">
+                              {item.refundedQuantity || 0}
+                            </td>
+                            <td className="p-2 text-center">
+                              {item.remainingQuantity}
+                            </td>
+                            <td className="p-2 text-center">
+                              <input
+                                type="number"
+                                min="0"
+                                max={item.remainingQuantity}
+                                value={item.refundQuantity}
+                                onChange={(e) => {
+                                  const updated = [...refundedItems];
+                                  const newValue = parseInt(
+                                    e.target.value || 0
+                                  );
+                                  updated[index].refundQuantity = Math.min(
+                                    Math.max(newValue, 0),
+                                    item.remainingQuantity
+                                  );
+                                  setRefundedItems(updated);
+                                }}
+                                className="w-16 border p-1 text-center"
+                                disabled={item.remainingQuantity === 0}
+                              />
+                            </td>
+                            <td className="p-2 text-center">
+                              £
+                              {item.effectivePrice?.toFixed(2) ||
+                                item.price.toFixed(2)}
+                            </td>
+                            <td className="p-2 text-center">
+                              £
+                              {(
+                                (item.effectivePrice || item.price) *
+                                item.refundQuantity
+                              ).toFixed(2)}
+                            </td>
+                          </tr>
+                        );
+                      }
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -573,7 +865,10 @@ export default function RefundPage() {
                   Total Refund: £
                   {refundedItems
                     .reduce(
-                      (sum, item) => sum + item.price * item.refundQuantity,
+                      (sum, item) =>
+                        sum +
+                        (item.effectivePrice || item.price) *
+                          item.refundQuantity,
                       0
                     )
                     .toFixed(2)}
@@ -630,10 +925,10 @@ export default function RefundPage() {
                 className="border p-2 rounded w-full"
               />
               <button
-                onClick={fetchOrders}
+                onClick={() => navigate(-1)}
                 className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
               >
-                Refresh
+                Back
               </button>
             </div>
           </div>
@@ -678,16 +973,16 @@ export default function RefundPage() {
                         className={`text-center border-t cursor-pointer ${
                           isSelected ? "bg-gray-100" : ""
                         }`}
-                        onClick={() =>
-                          setSelectedOrderInfo(
-                            isSelected
-                              ? null
-                              : {
-                                  orderId,
-                                  order,
-                                }
-                          )
-                        }
+                        // onClick={() =>
+                        //   setSelectedOrderInfo(
+                        //     isSelected
+                        //       ? null
+                        //       : {
+                        //           orderId,
+                        //           order,
+                        //         }
+                        //   )
+                        // }
                       >
                         <td className="p-2 border">
                           {order.date?.toDate?.().toLocaleString("en-GB", {
@@ -760,6 +1055,17 @@ export default function RefundPage() {
                                 ? "Processing..."
                                 : "COMPLETE REFUND"}
                             </button>
+                            {/* <button
+                              onClick={() => refundEntireOffer(order)}
+                              className={`${
+                                order.refunded || isProcessing
+                                  ? "bg-gray-400 cursor-not-allowed"
+                                  : "bg-purple-500 hover:bg-purple-600"
+                              } text-white px-3 py-1 rounded`}
+                              disabled={order.refunded || isProcessing}
+                            >
+                              REFUND OFFER ONLY
+                            </button> */}
                           </div>
                         </td>
                       </tr>
@@ -790,7 +1096,8 @@ export default function RefundPage() {
                                           <div>
                                             Total: £
                                             {(
-                                              Number(item.price) * Number(item.quantity)
+                                              Number(item.price) *
+                                              Number(item.quantity)
                                             ).toFixed(2)}
                                           </div>
                                           {item.refundedQuantity > 0 && (

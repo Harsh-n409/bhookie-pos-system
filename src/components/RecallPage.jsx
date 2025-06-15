@@ -12,7 +12,6 @@ export default function RecallPage() {
       const q = query(
         collection(db, "pendingOrders"),
         where("status", "==", "pending"),
-        where("expiresAt", ">", Timestamp.now())
       );
       
       const snapshot = await getDocs(q);

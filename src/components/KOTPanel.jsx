@@ -1,4 +1,4 @@
-import React from 'react';  
+import React from "react";
 import { useState, useEffect } from "react";
 import { db } from "../firebase/config";
 import { increment, where } from "firebase/firestore";
@@ -189,6 +189,7 @@ export default function KOTPanel({
   // };
 
   // Utility to clean item names for KOT
+ // Utility to clean item names for KOT
 const cleanItemName = (name) => {
   return name
     ?.replace(/\([^)]*\)/g, "")                     // remove (anything)
@@ -197,7 +198,7 @@ const cleanItemName = (name) => {
     ?.trim();                                       // trim edges
 };
 
-// clean name while printing
+// Additional clean name function while printing
 const getCleanMealName = (name) => {
   return name
     .replace(/\([^)]*\)/g, '') // Remove anything in parentheses
@@ -205,14 +206,15 @@ const getCleanMealName = (name) => {
     .replace(/\s+/g, ' ') // Collapse multiple spaces
     .trim();
 };
-
-
+ 
 
   const updateInventory = async (kotItems) => {
     try {
       // Process each item in the KOT
       for (const item of kotItems) {
-        const inventoryId = item.isUpgrade ? item.originalUpgradeId || item.id : item.id;
+        const inventoryId = item.isUpgrade
+          ? item.originalUpgradeId || item.id
+          : item.id;
         const itemRef = doc(db, "inventory", inventoryId);
 
         const itemSnap = await getDoc(itemRef);
@@ -251,10 +253,12 @@ const getCleanMealName = (name) => {
       const stockErrors = [];
 
       for (const item of items) {
-        const inventoryId = item.isUpgrade ? item.originalUpgradeId || item.id : item.id;
+        const inventoryId = item.isUpgrade
+          ? item.originalUpgradeId || item.id
+          : item.id;
         const itemRef = doc(db, "inventory", inventoryId);
-  
-         const itemSnap = await getDoc(itemRef);
+
+        const itemSnap = await getDoc(itemRef);
 
         if (itemSnap.exists()) {
           const currentStock = itemSnap.data().totalStockOnHand;
@@ -274,17 +278,17 @@ const getCleanMealName = (name) => {
   };
 
   // discount function for existing customers
- const updateTotals = (items = kotItems) => {
-  const subtotal = items.reduce((sum, item) => {
-    // For base items, include their price
-    if (!item.isUpgrade) {
-      return sum + (item.price * item.quantity);
-    }
-    // For upgrades, include their price (they're already in the items array)
-    return sum + (item.price * item.quantity);
-  }, 0);
-  
-  setSubTotal(parseFloat(subtotal));
+  const updateTotals = (items = kotItems) => {
+    const subtotal = items.reduce((sum, item) => {
+      // For base items, include their price
+      if (!item.isUpgrade) {
+        return sum + item.price * item.quantity;
+      }
+      // For upgrades, include their price (they're already in the items array)
+      return sum + item.price * item.quantity;
+    }, 0);
+
+    setSubTotal(parseFloat(subtotal));
 
     // Calculate available discount capacity
     const discountableAmount = subtotal - totalDiscount;
@@ -320,21 +324,21 @@ const getCleanMealName = (name) => {
     setEarnedPoints(earned);
   };
   // discount function for new customers
-  const applyNewCustomerDiscount = () => {
-    const subtotal = kotItems.reduce(
-      (sum, item) => sum + item.price * item.quantity,
-      0
-    );
-    const discount = Math.min(20, subtotal);
-    setDiscount(parseFloat(discount));
+  // const applyNewCustomerDiscount = () => {
+  //   const subtotal = kotItems.reduce(
+  //     (sum, item) => sum + item.price * item.quantity,
+  //     0
+  //   );
+  //   const discount = Math.min(20, subtotal);
+  //   setDiscount(parseFloat(discount));
 
-    const calculatedTotal = subtotal - discount;
-    setTotal(parseFloat(calculatedTotal));
+  //   const calculatedTotal = subtotal - discount;
+  //   setTotal(parseFloat(calculatedTotal));
 
-    // ✅ Earned points calculated from fresh total
-    const earnedPoints = Math.floor(calculatedTotal * 0.1);
-    setEarnedPoints(earnedPoints);
-  };
+  //   // ✅ Earned points calculated from fresh total
+  //   const earnedPoints = Math.floor(calculatedTotal * 0.1);
+  //   setEarnedPoints(earnedPoints);
+  // };
   const openNumberPad = (index) => {
     setSelectedItemIndex(index);
     setQuantityInput("");
@@ -414,6 +418,13 @@ const getCleanMealName = (name) => {
     }
 
     try {
+      const dayStatusDoc = await getDoc(doc(db, "dayStatus", "1"));
+      const dayStatusData = dayStatusDoc.data();
+
+      if (!dayStatusData?.isStarted) {
+        alert("Day has not started yet");
+        return;
+      }
       const cashierQuery = query(
         collection(db, "cashierAttendance"),
         where("isSignedIn", "==", true),
@@ -653,6 +664,23 @@ const getCleanMealName = (name) => {
   };
 
   const handleStoreOrder = async () => {
+     const dayStatusDoc = await getDoc(doc(db, "dayStatus", "1"));
+      const dayStatusData = dayStatusDoc.data();
+
+      if (!dayStatusData?.isStarted) {
+        alert("Day has not started yet");
+        return;
+      }
+      const cashierQuery = query(
+        collection(db, "cashierAttendance"),
+        where("isSignedIn", "==", true),
+        where("isOpen", "==", true)
+      );
+      const cashierSnapshot = await getDocs(cashierQuery);
+      if (cashierSnapshot.empty) {
+        alert("No active cashier. Please open a cashier first.");
+        return;
+      }
     if (kotItems.length === 0) {
       alert("Please add items before storing order");
       return;
@@ -1066,6 +1094,9 @@ const getCleanMealName = (name) => {
       // ✅ Use existing earnedPoints from state
       console.log("Earned Points for this order:", earnedPoints);
 
+      // Calculate discount ratio for proportional pricing
+      const discountRatio = subTotal > 0 ? total / subTotal : 1;
+
       // ✅ Prepare KOT data
       const data = {
         kot_id: newKOTId,
@@ -1084,6 +1115,7 @@ const getCleanMealName = (name) => {
           name: item.name,
           quantity: item.quantity,
           price: item.price,
+          effectivePrice: parseFloat((item.price * discountRatio).toFixed(2)),
           refundedQuantity: 0, // NEW: Track refunded quantities per item
           refunded: false, // NEW: Indicates if item is fully refunded
         })),
@@ -1167,22 +1199,22 @@ const getCleanMealName = (name) => {
   return str.replace(/\+/g, '+<wbr>');
 };
 
-
-     for (let i = 0; i < kotItems.length; i++) {
+for (let i = 0; i < kotItems.length; i++) {
   const item = kotItems[i];
-  
-  if (item.categoryId === 'meals') {
+
+  if (item.categoryId === "meals") {
     try {
       const itemRef = doc(db, "inventory", item.id);
       const itemSnap = await getDoc(itemRef);
       if (itemSnap.exists()) {
-        kotItems[i].itemNameForPrint = itemSnap.data().itemName; 
+        kotItems[i].itemNameForPrint = itemSnap.data().itemName;
       } else {
         kotItems[i].itemNameForPrint = item.name;
       }
     } catch (err) {
       console.error("Error fetching meal name:", err);
       kotItems[i].itemNameForPrint = item.name;
+
     }
   } else {
     try {

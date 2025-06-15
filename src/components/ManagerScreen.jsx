@@ -7,14 +7,11 @@ import {
   query,
   where,
   doc,
-  deleteDoc,
   updateDoc,
   getDoc,
-  addDoc,
-  runTransaction,
   arrayUnion,
   serverTimestamp,
-  newDoc,
+  writeBatch,
   Timestamp,
 } from "firebase/firestore";
 import { db } from "../firebase/config";
@@ -31,6 +28,7 @@ const roleMap = {
 export default function ManagerScreen() {
   const navigate = useNavigate(); // Initialize navigate
   const [activeTab, setActiveTab] = useState("Orders");
+
   const [orders, setOrders] = useState([]);
   const [selectedItemInfo, setSelectedItemInfo] = useState(null);
   const [employees, setEmployees] = useState([]);
@@ -45,6 +43,7 @@ export default function ManagerScreen() {
   const [cashierStatus, setCashierStatus] = useState("");
   const [sessionDocId, setSessionDocId] = useState(null);
   const { setUser, logout } = useAuth();
+  const [searchEmployeeTerm, setSearchEmployeeTerm] = useState("");
   const [filterDate, setFilterDate] = useState(() => {
     const today = new Date();
     // Use local date components instead of ISO string
@@ -73,18 +72,18 @@ export default function ManagerScreen() {
   }, [logout]);
 
   // Print order function similar to KOTPanel.jsx
-const handlePrintOrder = (order) => {
-  try {
-    let pointsToDeduct = 0;
-    let updatedPoints = 0;
+  const handlePrintOrder = (order) => {
+    try {
+      let pointsToDeduct = 0;
+      let updatedPoints = 0;
 
-    // Prepare highlighted order ID string
-    const fullOrderId = order.kot_id || order.id || '';
-    const orderIdPrefix = fullOrderId.slice(0, -3);
-    const orderIdLastThree = fullOrderId.slice(-3);
-    const highlightedOrderId = `${orderIdPrefix}<span style="color: red; font-weight: bold;">${orderIdLastThree}</span>`;
+      // Prepare highlighted order ID string
+      const fullOrderId = order.kot_id || order.id || "";
+      const orderIdPrefix = fullOrderId.slice(0, -3);
+      const orderIdLastThree = fullOrderId.slice(-3);
+      const highlightedOrderId = `${orderIdPrefix}<span style="color: red; font-weight: bold;">${orderIdLastThree}</span>`;
 
-    const printContent = `
+      const printContent = `
   <div style="
     width: 280px;
     font-family: 'Courier New', monospace;
@@ -103,7 +102,7 @@ const handlePrintOrder = (order) => {
         </div>
         <div style="display: flex; justify-content: space-between;">
           <span><strong>Cashier:</strong></span>
-          <span>${order.cashierName || ''} (${order.cashierId || ''})</span>
+          <span>${order.cashierName || ""} (${order.cashierId || ""})</span>
         </div>
         <div style="display: flex; justify-content: space-between;">
           <span><strong>Order Type:</strong></span>
@@ -111,14 +110,21 @@ const handlePrintOrder = (order) => {
         </div>
         <div style="display: flex; justify-content: space-between;">
           <span><strong>Time:</strong></span>
-          <span>${order.date?.toDate?.().toLocaleString() || new Date().toLocaleString()}</span>
+          <span>${
+            order.date?.toDate?.().toLocaleString() ||
+            new Date().toLocaleString()
+          }</span>
         </div>
 
         ${
           order.customerID
             ? `<div style="display: flex; justify-content: space-between;">
-                <span><strong>${order.isEmployee ? "Employee" : "Customer"}:</strong></span>
-                <span>${order.customerName || ''} (${order.customerID || ''})</span>
+                <span><strong>${
+                  order.isEmployee ? "Employee" : "Customer"
+                }:</strong></span>
+                <span>${order.customerName || ""} (${
+                order.customerID || ""
+              })</span>
               </div>`
             : ""
         }
@@ -152,38 +158,54 @@ const handlePrintOrder = (order) => {
           </thead>
           <tbody>
             ${
-              order.items?.map((item) => {
-                const isUpgrade = item.isUpgrade;
-                if (isUpgrade) return '';
+              order.items
+                ?.map((item) => {
+                  const isUpgrade = item.isUpgrade;
+                  if (isUpgrade) return "";
 
-                const upgrade = order.items.find(i => i.parentItem === item.id && i.isUpgrade);
-                let rows = `
+                  const upgrade = order.items.find(
+                    (i) => i.parentItem === item.id && i.isUpgrade
+                  );
+                  let rows = `
                   <tr>
                     <td style="padding: 2px 0;">${item.name}</td>
                     <td style="text-align: center;">${item.quantity}</td>
-                    <td style="text-align: right;">£${item.price.toFixed(2)}</td>
+                    <td style="text-align: right;">£${item.price.toFixed(
+                      2
+                    )}</td>
                   </tr>`;
 
-                if (upgrade) {
-                  rows += `
+                  if (upgrade) {
+                    rows += `
                   <tr>
                     <td style="padding: 2px 0; font-size: 11px; color: #555;">
-                      ↑ ${item.name} Upgraded to ${upgrade.itemName.replace('Upgrade to ', '')}
+                      ↑ ${item.name} Upgraded to ${upgrade.itemName.replace(
+                      "Upgrade to ",
+                      ""
+                    )}
                     </td>
                     <td style="text-align: center;"></td>
-                    <td style="text-align: right;">+£${upgrade.price.toFixed(2)}</td>
+                    <td style="text-align: right;">+£${upgrade.price.toFixed(
+                      2
+                    )}</td>
                   </tr>
                   <tr>
                     <td style="padding: 2px 0; font-weight: bold;">
-                      Total for ${item.name.replace(/\([^)]*\)/g, '').replace(/\b(regular|large|medium)\b/gi, '').trim()}
+                      Total for ${item.name
+                        .replace(/\([^)]*\)/g, "")
+                        .replace(/\b(regular|large|medium)\b/gi, "")
+                        .trim()}
                     </td>
                     <td style="text-align: center;"></td>
-                    <td style="text-align: right;">= £${(item.price + upgrade.price).toFixed(2)}</td>
+                    <td style="text-align: right;">= £${(
+                      item.price + upgrade.price
+                    ).toFixed(2)}</td>
                   </tr>`;
-                }
+                  }
 
-                return rows;
-              }).join('') || ''
+                  return rows;
+                })
+                .join("") || ""
             }
           </tbody>
         </table>
@@ -209,13 +231,17 @@ const handlePrintOrder = (order) => {
 
         ${
           order.customerID && !order.isEmployee && (order.discount || 0) > 0
-            ? `<p style="color: green;"> Discount applied: £${(pointsToDeduct).toFixed(2)} (Remaining Points: ${updatedPoints})</p>`
+            ? `<p style="color: green;"> Discount applied: £${pointsToDeduct.toFixed(
+                2
+              )} (Remaining Points: ${updatedPoints})</p>`
             : ""
         }
 
         ${
           order.customerID && !order.isEmployee
-            ? `<p><strong>Earned Points:</strong> ${order.earnedPoints || 0}</p>`
+            ? `<p><strong>Earned Points:</strong> ${
+                order.earnedPoints || 0
+              }</p>`
             : ""
         }
 
@@ -225,10 +251,10 @@ const handlePrintOrder = (order) => {
       </div>
     </div>`;
 
-    const printWindow = window.open("", "_blank");
-    if (printWindow) {
-      printWindow.document.open();
-      printWindow.document.write(`
+      const printWindow = window.open("", "_blank");
+      if (printWindow) {
+        printWindow.document.open();
+        printWindow.document.write(`
     <html>
       <head>
         <title>Print KOT</title>
@@ -271,19 +297,18 @@ const handlePrintOrder = (order) => {
       </body>
     </html>
   `);
-      printWindow.document.close();
+        printWindow.document.close();
+      }
+
+      // Clear selected order info after printing
+      setSelectedOrderInfo(null);
+    } catch (error) {
+      console.error("Error in print generation:", error);
+      alert("Failed to print order. Please try again.");
     }
+  };
 
-    // Clear selected order info after printing
-    setSelectedOrderInfo(null);
-  } catch (error) {
-    console.error("Error in print generation:", error);
-    alert("Failed to print order. Please try again.");
-  }
-};
-
-
-   const handleOpenCashier = async () => {
+  const handleOpenCashier = async () => {
     const trimmedCode = cashierCode.trim();
     if (!trimmedCode) {
       setCashierStatus("Please enter a valid employee ID.");
@@ -301,6 +326,14 @@ const handlePrintOrder = (order) => {
 
       if (querySnapshot.empty) {
         setCashierStatus("Invalid employee ID.");
+        return;
+      }
+
+      const dayStatusDoc = await getDoc(doc(db, "dayStatus", "1"));
+      const dayStatusData = dayStatusDoc.data();
+
+      if (!dayStatusData?.isStarted) {
+        setCashierStatus("Day has not started.");
         return;
       }
 
@@ -728,6 +761,13 @@ const handlePrintOrder = (order) => {
       console.error("Error fetching employees:", err);
     }
   };
+  const filteredEmployees = employees.filter((employee) => {
+    const searchTerm = searchEmployeeTerm.toLowerCase();
+    return (
+      employee.name.toLowerCase().includes(searchTerm) ||
+      employee.employeeID.toLowerCase().includes(searchTerm)
+    );
+  });
 
   // In ManagerScreen component
   const fetchOrders = async () => {
@@ -1019,6 +1059,71 @@ const handlePrintOrder = (order) => {
     return sortOrderAsc ? idA.localeCompare(idB) : idB.localeCompare(idA);
   });
 
+  const startDay = async () => {
+    try {
+      const dayStatusRef = doc(db, "dayStatus", "1");
+      const dayStatusDoc = await getDoc(doc(db, "dayStatus", "1"));
+      const dayStatusData = dayStatusDoc.data();
+
+      if (dayStatusData?.isStarted) {
+        alert("Day has already started !");
+        return;
+      }
+      await setDoc(
+        dayStatusRef,
+        {
+          isStarted: true,
+        },
+        { merge: true }
+      );
+
+      alert("Day started successfully! .");
+    } catch (error) {
+      console.error("Failed to start day:", error);
+      alert(`Failed to start day: ${error.message}`);
+    }
+  };
+
+  const endDay = async () => {
+  try {
+    const dayStatusRef = doc(db, "dayStatus", "1");
+    const dayStatusDoc = await getDoc(dayStatusRef);
+    const dayStatusData = dayStatusDoc.data();
+
+    if (!dayStatusData?.isStarted) {
+      alert("Day has already ended");
+      return;
+    }
+
+    // 1. End the day
+    await setDoc(
+      dayStatusRef,
+      {
+        isStarted: false,
+      },
+      { merge: true }
+    );
+
+    // 2. Clear all documents from 'pendingOrders'
+    const pendingOrdersRef = collection(db, "pendingOrders");
+    const pendingOrdersSnapshot = await getDocs(pendingOrdersRef);
+
+    const batch = writeBatch(db);
+
+    pendingOrdersSnapshot.forEach((docSnap) => {
+      batch.delete(docSnap.ref);
+    });
+
+    await batch.commit();
+
+    alert("Day Ended successfully! All pending orders cleared.");
+  } catch (error) {
+    console.error("Failed to end day:", error);
+    alert(`Failed to end day: ${error.message}`);
+  }
+};
+
+
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Fixed Sidebar */}
@@ -1050,6 +1155,14 @@ const handlePrintOrder = (order) => {
             onClick={() => setActiveTab("Cash Management")}
           >
             Cashier Control Panel
+          </button>
+          <button
+            className={`block w-full text-left px-4 py-2 rounded ${
+              activeTab === "Day Control" ? "bg-gray-700" : "hover:bg-gray-700"
+            }`}
+            onClick={() => setActiveTab("Day Control")}
+          >
+            Day Control
           </button>
         </nav>
 
@@ -1263,6 +1376,21 @@ const handlePrintOrder = (order) => {
         {activeTab === "Staff Meal" && (
           <div className="bg-gray-50 p-4 rounded-lg">
             <h3 className="text-lg font-semibold mb-4">Staff Meal Credits</h3>
+
+            {/* Search Bar */}
+            <div className="mb-4">
+              <label className="block mb-2 font-medium">
+                Search Employees:
+              </label>
+              <input
+                type="text"
+                value={searchEmployeeTerm}
+                onChange={(e) => setSearchEmployeeTerm(e.target.value)}
+                placeholder="Search by name or ID..."
+                className="border p-2 rounded w-full"
+              />
+            </div>
+
             <div className="max-h-[600px] overflow-y-auto">
               <table className="w-full">
                 <thead className="bg-gray-200 sticky top-0">
@@ -1275,7 +1403,7 @@ const handlePrintOrder = (order) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {employees.map((employee) => (
+                  {filteredEmployees.map((employee) => (
                     <tr
                       key={employee.id}
                       className={`border-b hover:bg-gray-100 ${
@@ -1309,9 +1437,10 @@ const handlePrintOrder = (order) => {
                       <td className="p-2">{employee.employeeID}</td>
                       <td className="p-2">{employee.meal.mealCredits || 0}</td>
                       <td className="p-2">
-                        {employee.meal.mealCredits === 0 ? (
+                        {employee.meal.mealCredits === 0 ||
+                        employee.isClockedIn === false ? (
                           <span className="text-red-600 font-medium">
-                            Used All
+                            Not Available
                           </span>
                         ) : (
                           <span className="text-green-600 font-medium">
@@ -1330,7 +1459,7 @@ const handlePrintOrder = (order) => {
                   ))}
                 </tbody>
               </table>
-              {employees.length === 0 && (
+              {filteredEmployees.length === 0 && (
                 <p className="text-center text-gray-500 mt-4">
                   No employees found
                 </p>
@@ -1392,6 +1521,26 @@ const handlePrintOrder = (order) => {
                 disabled={!cashierCode || cashierLoading}
               >
                 End Shift
+              </button>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "Day Control" && (
+          <div>
+            <h3 className="text-lg font-semibold mb-4">Day Control</h3>
+            <div className="flex gap-4">
+              <button
+                onClick={startDay}
+                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+              >
+                Start Day
+              </button>
+              <button
+                onClick={endDay}
+                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+              >
+                End Day
               </button>
             </div>
           </div>
