@@ -1207,7 +1207,7 @@ for (let i = 0; i < kotItems.length; i++) {
       const itemRef = doc(db, "inventory", item.id);
       const itemSnap = await getDoc(itemRef);
       if (itemSnap.exists()) {
-        kotItems[i].itemNameForPrint = itemSnap.data().itemName;
+      kotItems[i].itemNameForPrint = itemSnap.exists() ? itemSnap.data().itemName : item.name;
       } else {
         kotItems[i].itemNameForPrint = item.name;
       }
@@ -1265,9 +1265,11 @@ const printContent = `
         const upgrade = kotItems.find(i => i.parentItem === item.id && i.isUpgrade);
         const upgradePrice = upgrade ? upgrade.price : 0;
 
-      let totalForName = "";
+     let totalForName = "";
 
-if (item.categoryId === 'meals') {
+const mealCategories = ['meals', 'boxmeals', 'familymeals'];
+
+if (mealCategories.includes(item.categoryId)) {
   totalForName = "Meals";
 } else {
   if (upgrade) {
@@ -1276,8 +1278,6 @@ if (item.categoryId === 'meals') {
     totalForName = item.dbItemName;
   }
 }
-
-
         return `
         <tr><td colspan="3" style="border-top: 1px dashed #000; padding-top: 5px;"></td></tr>
         <tr><td style="padding: 2px 0; word-break: break-word;">${item.name}</td>
@@ -1294,10 +1294,13 @@ if (item.categoryId === 'meals') {
 
      <tr>
   <td colspan="2" style="font-weight: bold; padding-bottom: 5px; word-break: break-word; white-space: normal; overflow-wrap: anywhere;">
-    ${item.categoryId === 'meals' ? 'Total for Meals' : `Total for ${insertBreaks(totalForName)}`}
+    ${item.name.toLowerCase().includes("meal") ? "Total for Meals" : `Total for ${insertBreaks(totalForName)}`}
   </td>
-  <td style="text-align: right; font-weight: bold;">£${(item.price + upgradePrice).toFixed(2)}</td>
+  <td style="text-align: right; font-weight: bold;">
+    £${(item.price + (upgrade?.price || 0)).toFixed(2)}
+  </td>
 </tr>
+
 
 
         <tr><td colspan="3" style="border-bottom: 1px dashed #000; padding-bottom: 5px;"></td></tr>`;
@@ -1436,13 +1439,17 @@ if (item.categoryId === 'meals') {
           <div>{item.name}</div>
           
        
-          {item.customizations && (
-            <div className="text-sm text-gray-500">
-              {item.customizations['cat05'] && `${item.customizations['cat05'].name}`}
-              {item.customizations['cat01'] && `${item.customizations['cat05'] ? ' • ' : ''}${item.customizations['cat01'].name}`}
-            </div>
-          )}
-          
+        {item.customizations && (
+  <div className="text-sm text-gray-600 pl-2">
+    {item.customizations['cat05'] && (
+      <div><strong>Burger:</strong> {item.customizations['cat05'].name}</div>
+    )}
+    {item.customizations['cat01'] && (
+      <div><strong>Bites:</strong> {item.customizations['cat01'].name}</div>
+    )}
+  </div>
+)}
+
           
           {item.sauces?.length > 0 && (
             <div className="text-sm text-gray-500">

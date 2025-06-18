@@ -206,87 +206,91 @@ export default function MenuGrid({
   const filteredItems = useMemo(() => {
     return items.filter((item) => item.categoryId === selectedCategoryId);
   }, [items, selectedCategoryId]);
+  
+  const handleCancelUpgrade = () => {
+  setSelectedForUpgrade(null);
+  setShowUpgradePopup(false);
+};
 
-  const handleItemClick = async (item) => {
-    setSelectedItem(item);
-    setNextCustomization(null);
 
-  try {
-    if (item.requiresCustomization && item.customizationCategory?.length) {
-      const optionsByCategory = await Promise.all(
-        item.customizationCategory.map(async (catId) => {
-          try {
-            const allItemsSnap = await getDocs(
-              query(collection(db, "items"), where("active", "==", true))
-            );
+const handleItemClick = async (item) => {
+  setSelectedItem(item);
+  setNextCustomization(null);
 
-            const filtered = allItemsSnap.docs
-              .map(doc => ({ id: doc.id, ...doc.data() }))
-              .filter(doc => {
-                const categoryField = doc.categoryId;
-                const actualCategoryId = typeof categoryField === "string"
-                  ? categoryField.trim()
-                  : categoryField?.id;
-                return actualCategoryId === catId.trim();
-              });
+  const mealName = (item.itemName || "").toLowerCase().trim();
 
-            return {
-              categoryId: catId.trim(),
-              options: filtered,
-            };
-          } catch (err) {
-            return { categoryId: catId.trim(), options: [] };
-          }
-        })
-      );
+  // ✅ EXACT PHRASE MATCH ONLY
+  const hasBurger = /\bany burger\b/.test(mealName);
+  const hasBites = /\bany bites\b/.test(mealName);
 
-      const cat01 = optionsByCategory.find(c => c.categoryId === "cat01" && c.options.length > 0);
-      const cat05 = optionsByCategory.find(c => c.categoryId === "cat05" && c.options.length > 0);
+  if (hasBurger || hasBites) {
+    const optionsByCategory = await Promise.all(
+      item.customizationCategory.map(async (catId) => {
+        const allItemsSnap = await getDocs(
+          query(collection(db, "items"), where("active", "==", true))
+        );
+        const filtered = allItemsSnap.docs
+          .map((doc) => ({ id: doc.id, ...doc.data() }))
+          .filter((doc) => {
+            const categoryField = doc.categoryId;
+            const actualCategoryId = typeof categoryField === "string"
+              ? categoryField.trim()
+              : categoryField?.id;
+            return actualCategoryId === catId.trim();
+          });
 
-        if (cat01) {
-          setCustomizationOptions([cat01]);
-          setSelectedMeal(item);
-          setCustomizationStep(0);
-          setShowCustomizationPopup(true);
+        return { categoryId: catId.trim(), options: filtered };
+      })
+    );
 
-        if (cat05) setNextCustomization(cat05); // wait for user to select bites
-        return;
-      }
+    const catBurger = optionsByCategory.find(c => c.categoryId === "cat05");
+    const catBites = optionsByCategory.find(c => c.categoryId === "cat01");
 
-        if (cat05) {
-          setCustomizationOptions([cat05]);
-          setSelectedMeal(item);
-          setCustomizationStep(1);
-          setShowCustomizationPopup(true);
-          return;
-        }
-      }
-
-      // fallback normal add
-      onAddItem({
-        id: item.id,
-        name: item.itemName,
-        price: item.price,
-        quantity: 1,
-      });
-
-    if (item.itemName.toLowerCase().includes("large")) return;
-
-      const isBaseEligible = ELIGIBLE_BASE_ITEMS.includes(item.itemName.trim());
-      const isMeal = item.categoryId === "meals";
-
-    if (isBaseEligible || isMeal) {
-      const upgrades = await getUpgradeOptions(isMeal);
-      if (upgrades.length > 0) {
-        setSelectedForUpgrade(item);
-        setUpgradeOptions(upgrades);
-        setShowUpgradePopup(true);
-      }
+    if (hasBurger && hasBites && catBurger && catBites) {
+      setCustomizationOptions([catBurger]);
+      setNextCustomization(catBites);
+      setSelectedMeal(item);
+      setCustomizationStep(0);
+      setShowCustomizationPopup(true);
+      return;
+    } else if (hasBurger && catBurger) {
+      setCustomizationOptions([catBurger]);
+      setSelectedMeal(item);
+      setCustomizationStep(0);
+      setShowCustomizationPopup(true);
+      return;
+    } else if (hasBites && catBites) {
+      setCustomizationOptions([catBites]);
+      setSelectedMeal(item);
+      setCustomizationStep(0);
+      setShowCustomizationPopup(true);
+      return;
     }
-  } catch (err) {
-    onAddItem({ id: item.id, name: item.itemName, price: item.price, quantity: 1 });
+  }
+
+  // ❌ This fallback MUST NOT trigger customization popup!
+  // So we only add the item directly
+  onAddItem({
+    id: item.id,
+    name: item.itemName,
+    price: item.price,
+    quantity: 1,
+  });
+
+  // Handle upgrade
+  const isBaseEligible = ELIGIBLE_BASE_ITEMS.includes(item.itemName.trim());
+  const isMeal = item.categoryId === "meals";
+
+  if (isBaseEligible || isMeal) {
+    const upgrades = await getUpgradeOptions(isMeal);
+    if (upgrades.length > 0) {
+      setSelectedForUpgrade(item);
+      setUpgradeOptions(upgrades);
+      setShowUpgradePopup(true);
+    }
   }
 };
+
 
 
 
@@ -308,64 +312,62 @@ export default function MenuGrid({
   };
 
   const handleMealCustomization = (option, categoryId) => {
-    if (!selectedMeal) return;
+  if (!selectedMeal) return;
 
-  onAddItem({
-    id: selectedMeal.id,
-    name: selectedMeal.itemName,
-    price: selectedMeal.price,
-    quantity: 1,
-    customizations: {
-      [categoryId]: {
-        id: option.id,
-        name: option.itemName,
-        price: option.price || 0,
-      },
+  // Build or update customization object
+  const updatedCustomizations = {
+    ...(selectedMeal.customizations || {}),
+    [categoryId]: {
+      id: option.id,
+      name: option.itemName,
+      price: option.price || 0,
     },
+  };
+
+  const updatedMeal = {
+    ...selectedMeal,
+    customizations: updatedCustomizations,
+  };
+
+  // If more customization is left (e.g., burger comes after bites), show next popup
+  if (nextCustomization) {
+    setSelectedMeal(updatedMeal); // Keep building
+    setCustomizationOptions([nextCustomization]);
+    setCustomizationStep(1);
+    setShowCustomizationPopup(true);
+    setNextCustomization(null);
+    return;
+  }
+
+  // All customizations done — now add item
+  onAddItem({
+    id: updatedMeal.id,
+    name: updatedMeal.itemName,
+    price: updatedMeal.price,
+    quantity: 1,
+    customizations: updatedCustomizations,
   });
 
-  // CLOSE current (Bites) popup
-setShowCustomizationPopup(false);
-
-if (nextCustomization) {
-  // Show Burger popup next
-  setCustomizationOptions([nextCustomization]);
-  setCustomizationStep(1);
-  setShowCustomizationPopup(true);
-  setNextCustomization(null);
-} else {
-  // All customizations done, now check for upgrade
-  const hasEligibleFries = ELIGIBLE_MEAL_KEYWORDS.some(
-    keyword => selectedMeal.itemName.includes(keyword)
+  // If upgrade is allowed, open upgrade popup
+  const hasEligibleFries = ELIGIBLE_MEAL_KEYWORDS.some((keyword) =>
+    updatedMeal.itemName.includes(keyword)
   );
 
   if (hasEligibleFries) {
-    getUpgradeOptions(true).then(upgrades => {
+    getUpgradeOptions(true).then((upgrades) => {
       if (upgrades.length > 0) {
-        setSelectedForUpgrade(selectedMeal);
+        setSelectedForUpgrade(updatedMeal);
         setUpgradeOptions(upgrades);
         setShowUpgradePopup(true);
       }
     });
   }
 
-  setSelectedMeal(null); // reset
-}
-
-
-  // CLOSE current (Bites) popup
+  // Close customization
+  setSelectedMeal(null);
   setShowCustomizationPopup(false);
-
-  // IF Burger step exists, open now
-  if (nextCustomization) {
-    setCustomizationOptions([nextCustomization]);
-    setCustomizationStep(1);
-    setShowCustomizationPopup(true);
-    setNextCustomization(null);
-  } else {
-    setSelectedMeal(null);
-  }
 };
+
 
 
   // In handleAddUpgrade (MenuGrid.jsx)
@@ -465,287 +467,318 @@ if (nextCustomization) {
     setShowOffers(true);
   };
 
-  return (
-    <div className="flex flex-row w-full h-[calc(100vh-140px)] overflow-hidden">
-      {/* Categories */}
-      <div className="w-[180px] bg-purple-800 text-white p-2 flex flex-col gap-1 overflow-y-auto">
+return (
+  <div className="flex flex-row w-full h-[calc(100vh-140px)] overflow-hidden">
+    {/* Categories */}
+    <div className="w-[180px] bg-purple-800 text-white p-2 flex flex-col gap-1 overflow-y-auto">
+      <button
+        onClick={handleShowOffers}
+        className={`py-2 px-2 rounded text-left tracking-wide mb-2 ${
+          showOffers && !selectedCategoryId
+            ? "bg-white text-purple-800 font-bold"
+            : "bg-purple-900 hover:bg-purple-600"
+        } transition`}
+      >
+        🔥 OFFERS
+      </button>
+
+      {categories.map((cat) => (
         <button
-          onClick={handleShowOffers}
-          className={`py-2 px-2 rounded text-left tracking-wide mb-2 ${
-            showOffers && !selectedCategoryId
+          key={cat.id}
+          onClick={() => handleCategoryClick(cat.id)}
+          className={`py-2 px-2 rounded text-left tracking-wide ${
+            selectedCategoryId === cat.id
               ? "bg-white text-purple-800 font-bold"
-              : "bg-purple-900 hover:bg-purple-600"
+              : "bg-purple-700 hover:bg-purple-600"
           } transition`}
         >
-          🔥 OFFERS
+          {cat.name?.toUpperCase()}
         </button>
+      ))}
+    </div>
 
-        {categories.map((cat) => (
-          <button
-            key={cat.id}
-            onClick={() => handleCategoryClick(cat.id)}
-            className={`py-2 px-2 rounded text-left tracking-wide ${
-              selectedCategoryId === cat.id
-                ? "bg-white text-purple-800 font-bold"
-                : "bg-purple-700 hover:bg-purple-600"
-            } transition`}
-          >
-            {cat.name?.toUpperCase()}
-          </button>
-        ))}
+    {/* Items or Offers */}
+    <div className="flex-1 p-4 bg-purple-100 overflow-y-auto">
+      {error ? (
+        <div className="text-red-500">{error}</div>
+      ) : selectedCategoryId ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-2">
+          {filteredItems.map((item) => {
+            const stock = inventory[item.id]?.totalStockOnHand;
+            const isClickable = stock > 0 && !item.isUpgrade;
+
+            return (
+              <button
+                key={item.id}
+                onClick={
+                  isClickable ? () => handleItemClick(item) : undefined
+                }
+                disabled={!isClickable}
+                className={`rounded p-1 shadow-md text-white text-center flex flex-col justify-center items-center transition ${
+                  isClickable ? "" : "opacity-50 cursor-not-allowed"
+                }`}
+                style={{
+                  backgroundColor: item.itemName
+                    .toLowerCase()
+                    .includes("chicken")
+                    ? "#e60000"
+                    : item.itemName.toLowerCase().includes("paneer")
+                    ? "#1f3b73"
+                    : "#22594c",
+                }}
+              >
+                <div>{item.itemName.toUpperCase()}</div>
+                <div className="text-xl mt-3">£{item.price}</div>
+                {stock !== undefined && stock <= 0 && (
+                  <div className="text-xs text-white-500 mt-1">
+                    Out of stock
+                  </div>
+                )}
+                {stock !== undefined && stock > 0 && stock < 10 && (
+                  <div className="text-xs text-white-600 mt-1">
+                    Low stock: {stock} left
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        showOffers && (
+          <div className="h-full">
+            <h2 className="text-3xl font-bold mb-6 text-purple-900 text-center">
+              TODAY'S SPECIAL OFFERS
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {offers.map((offer) => (
+                <div
+                  key={offer.id}
+                  className={`${offer.color} rounded-xl shadow-xl overflow-hidden text-white transform hover:scale-105 transition duration-300`}
+                >
+                  <div className="p-6">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="text-2xl font-bold mb-2">
+                          {offer.title}
+                        </h3>
+                        <p className="text-lg mb-4">
+                          {offer.items
+                            .map((item) => item.itemName)
+                            .join(" + ")}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-3xl font-bold">
+                          £{offer.offerPrice}
+                        </span>
+                        <span className="block text-sm line-through opacity-80">
+                          £{offer.originalPrice.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center mt-4">
+                      <span className="text-sm bg-white bg-opacity-20 px-3 py-1 rounded-full">
+                        SAVE{" "}
+                        {Math.round(
+                          ((offer.originalPrice - offer.offerPrice) /
+                            offer.originalPrice) *
+                            100
+                        )}
+                        %
+                      </span>
+                      <button
+                        onClick={() => handleAddOffer(offer)}
+                        className="bg-white text-purple-800 px-4 py-2 rounded-lg font-bold hover:bg-purple-100 transition"
+                      >
+                        ADD TO ORDER
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      )}
+    </div>
+
+    {/* Customization Popup */}
+    {showCustomizationPopup && selectedMeal && (
+      <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-40">
+        <div className="bg-white rounded-lg p-5 shadow-lg max-w-md w-full max-h-[80vh] overflow-y-auto">
+          <h2 className="text-xl font-bold mb-5 text-purple-900">
+            Customize {selectedMeal.itemName}
+          </h2>
+
+          {customizationOptions.length > 0 ? (
+            <div className="space-y-6">
+              {customizationOptions.map((category) => (
+                <div key={category.categoryId}>
+                  <h3 className="font-semibold mb-3 text-lg border-b pb-2">
+                    {category.categoryId === "cat01"
+                      ? "Choose Your Bites:"
+                      : category.categoryId === "cat05"
+                      ? "Choose Your Burger:"
+                      : "Choose Option"}
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    {category.options.map((option) => (
+                      <button
+                        key={option.id}
+                        onClick={() =>
+                          handleMealCustomization(option, category.categoryId)
+                        }
+                        className="p-3 bg-purple-100 hover:bg-purple-200 rounded-lg text-left transition"
+                      >
+                        <div className="font-semibold">{option.itemName}</div>
+                        {option.price > 0 && (
+                          <div className="text-sm">
+                            +£{option.price.toFixed(2)}
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p>No customization options available.</p>
+          )}
+           <button
+  onClick={async () => {
+    setShowCustomizationPopup(false);
+
+    if (nextCustomization) {
+      // Move to next customization step
+      setCustomizationOptions([nextCustomization]);
+      setCustomizationStep(1);
+      setShowCustomizationPopup(true);
+      setNextCustomization(null);
+    } else {
+      // Finish and add to KOT — include any previous customizations (e.g. Burger)
+      const isMeal = selectedMeal?.categoryId === "meals";
+      const isBaseEligible = ELIGIBLE_BASE_ITEMS.includes(selectedMeal?.itemName?.trim());
+
+      const existingCustomizations = selectedMeal?.customizations || {};
+
+      onAddItem({
+        id: selectedMeal.id,
+        name: selectedMeal.itemName,
+        price: selectedMeal.price,
+        quantity: 1,
+        customizations: existingCustomizations,
+      });
+
+      if (isMeal || isBaseEligible) {
+        const upgrades = await getUpgradeOptions(isMeal);
+        if (upgrades.length > 0) {
+          setSelectedForUpgrade(selectedMeal);
+          setUpgradeOptions(upgrades);
+          setShowUpgradePopup(true);
+        }
+      }
+
+      setSelectedMeal(null);
+    }
+  }}
+  className="mt-6 w-full bg-gray-300 hover:bg-gray-400 text-black font-semibold py-2 px-4 rounded"
+>
+  No Thanks
+</button>
+
+        </div>
       </div>
+    )}
 
-      {/* Items or Offers */}
-      <div className="flex-1 p-4 bg-purple-100 overflow-y-auto">
-        {error ? (
-          <div className="text-red-500">{error}</div>
-        ) : selectedCategoryId ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-2">
-            {filteredItems.map((item) => {
-              const stock = inventory[item.id]?.totalStockOnHand;
-              const isClickable = stock > 0 && !item.isUpgrade;
+    {/* Upgrade Popup (Original Style Restored) */}
+    {showUpgradePopup && (
+      <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-50">
+        <div className="bg-white rounded-lg p-5 shadow-lg max-w-md w-full">
+          <h2 className="text-xl font-bold mb-5 text-purple-900">
+            Available Upgrades for {selectedForUpgrade?.itemName}
+          </h2>
+          <div className="grid grid-cols-2 gap-3">
+            {upgradeOptions.map((upgrade) => {
+              const isOutOfStock =
+                (inventory[upgrade.id]?.totalStockOnHand || 0) <= 0;
 
               return (
                 <button
-                  key={item.id}
-                  onClick={
-                    isClickable ? () => handleItemClick(item) : undefined
-                  }
-                  disabled={!isClickable}
-                  className={`rounded p-1 shadow-md text-white text-center flex flex-col justify-center items-center transition ${
-                    isClickable ? "" : "opacity-50 cursor-not-allowed"
+                  key={upgrade.id}
+                  onClick={() => !isOutOfStock && handleAddUpgrade(upgrade)}
+                  className={`p-3 rounded-lg text-left ${
+                    isOutOfStock
+                      ? "bg-gray-200 cursor-not-allowed"
+                      : "bg-blue-100 hover:bg-blue-200"
                   }`}
-                  style={{
-                    backgroundColor: item.itemName
-                      .toLowerCase()
-                      .includes("chicken")
-                      ? "#e60000"
-                      : item.itemName.toLowerCase().includes("paneer")
-                      ? "#1f3b73"
-                      : "#22594c",
-                  }}
+                  disabled={isOutOfStock}
                 >
-                  <div>{item.itemName.toUpperCase()}</div>
-                  <div className="text-xl mt-3">£{item.price}</div>
-                  {stock !== undefined && stock <= 0 && (
-                    <div className="text-xs text-white-500 mt-1">
+                  <div className="font-semibold">{upgrade.itemName}</div>
+                  <div className="text-sm">+£{upgrade.price.toFixed(2)}</div>
+                  {isOutOfStock && (
+                    <div className="text-red-500 text-xs mt-1">
                       Out of stock
-                    </div>
-                  )}
-                  {stock !== undefined && stock > 0 && stock < 10 && (
-                    <div className="text-xs text-white-600 mt-1">
-                      Low stock: {stock} left
                     </div>
                   )}
                 </button>
               );
             })}
           </div>
-        ) : (
-          showOffers && (
-            <div className="h-full">
-              <h2 className="text-3xl font-bold mb-6 text-purple-900 text-center">
-                TODAY'S SPECIAL OFFERS
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {offers.map((offer) => (
-                  <div
-                    key={offer.id}
-                    className={`${offer.color} rounded-xl shadow-xl overflow-hidden text-white transform hover:scale-105 transition duration-300`}
-                  >
-                    <div className="p-6">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h3 className="text-2xl font-bold mb-2">
-                            {offer.title}
-                          </h3>
-                          <p className="text-lg mb-4">
-                            {offer.items
-                              .map((item) => item.itemName)
-                              .join(" + ")}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-3xl font-bold">
-                            £{offer.offerPrice}
-                          </span>
-                          <span className="block text-sm line-through opacity-80">
-                            £{offer.originalPrice.toFixed(2)}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex justify-between items-center mt-4">
-                        <span className="text-sm bg-white bg-opacity-20 px-3 py-1 rounded-full">
-                          SAVE{" "}
-                          {Math.round(
-                            ((offer.originalPrice - offer.offerPrice) /
-                              offer.originalPrice) *
-                              100
-                          )}
-                          %
-                        </span>
-                        <button
-                          onClick={() => handleAddOffer(offer)}
-                          className="bg-white text-purple-800 px-4 py-2 rounded-lg font-bold hover:bg-purple-100 transition"
-                        >
-                          ADD TO ORDER
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )
-        )}
+
+          <button
+            onClick={() => {
+              setSelectedForUpgrade(null);
+              setShowUpgradePopup(false);
+            }}
+            className="mt-4 px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+          >
+            No Thanks
+          </button>
+        </div>
       </div>
+    )}
 
-      {showCustomizationPopup && selectedMeal && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-40">
-          <div className="bg-white rounded-lg p-5 shadow-lg max-w-md w-full max-h-[80vh] overflow-y-auto">
-            <h2 className="text-xl font-bold mb-5 text-purple-900">
-              Customize {selectedMeal.itemName}
-            </h2>
-
-            {customizationOptions.length > 0 ? (
-              <div className="space-y-6">
-                {customizationOptions.map((category) => (
-                  <div key={category.categoryId}>
-                    <h3 className="font-semibold mb-3 text-lg border-b pb-2">
-                      {category.categoryId === "cat01"
-                        ? "Choose Your Bites:"
-                        : category.categoryId === "cat05"
-                        ? "Choose Your Burger:"
-                        : "Choose Your Option:"}
-                    </h3>
-                    <div className="grid grid-cols-2 gap-3">
-                      {category.options.map((option) => (
-                        <button
-                          key={option.id}
-                          onClick={() =>
-                            handleMealCustomization(option, category.categoryId)
-                          }
-                          className="p-3 bg-purple-100 hover:bg-purple-200 rounded-lg text-left transition"
-                        >
-                          <div className="font-semibold">{option.itemName}</div>
-                          {option.price > 0 && (
-                            <div className="text-sm">
-                              +£{option.price.toFixed(2)}
-                            </div>
-                          )}
-                          {inventory[option.id]?.totalStockOnHand <= 0 && (
-                            <div className="text-xs text-red-500 mt-1">
-                              Out of stock
-                            </div>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-gray-500">
-                No customization options available
-              </div>
-            )}
-
-            <button
-              onClick={() => setShowCustomizationPopup(false)}
-              className="mt-6 w-full py-2 bg-red-600 text-white rounded hover:bg-red-700 transition"
-            >
-              No Thanks
-            </button>
+    {/* Sauce Popup */}
+    {showSaucePopup && selectedItem && (
+      <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-40">
+        <div className="bg-white rounded-lg p-5 shadow-lg max-w-md w-full max-h-[80vh] overflow-y-auto">
+          <h2 className="text-xl font-bold mb-5 text-purple-900">
+            Select Sauce for {selectedItem.itemName}
+          </h2>
+          <div className="grid grid-cols-2 gap-3">
+            {sauceOptions.map((sauce) => (
+              <button
+                key={sauce.id}
+                onClick={() => handleSelectSauce(sauce)}
+                className="p-3 bg-purple-100 hover:bg-purple-200 rounded-lg text-left transition"
+              >
+                <div className="font-semibold">{sauce.itemName}</div>
+                {sauce.price > 0 && (
+                  <div className="text-sm">+£{sauce.price.toFixed(2)}</div>
+                )}
+              </button>
+            ))}
           </div>
+          <button
+            onClick={() => handleSelectSauce(null)}
+            className="mt-4 w-full bg-gray-300 hover:bg-gray-400 text-black font-semibold py-2 px-4 rounded"
+          >
+            No Sauce
+          </button>
+          <button
+            onClick={() => {
+              setShowSaucePopup(false);
+              setSelectedItem(null);
+            }}
+            className="mt-2 w-full bg-red-200 hover:bg-red-300 text-black font-semibold py-2 px-4 rounded"
+          >
+            Cancel
+          </button>
         </div>
-      )}
+      </div>
+    )}
+  </div>
+);
 
-      {showUpgradePopup && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-50">
-          <div className="bg-white rounded-lg p-5 shadow-lg max-w-md w-full">
-            <h2 className="text-xl font-bold mb-5 text-purple-900">
-              Available Upgrades for {selectedForUpgrade?.itemName}
-            </h2>
-            <div className="grid grid-cols-2 gap-3">
-              {upgradeOptions.map((upgrade) => {
-                const isOutOfStock =
-                  (inventory[upgrade.id]?.totalStockOnHand || 0) <= 0;
-
-                return (
-                  <button
-                    key={upgrade.id}
-                    onClick={() => !isOutOfStock && handleAddUpgrade(upgrade)}
-                    className={`p-3 rounded-lg text-left ${
-                      isOutOfStock
-                        ? "bg-gray-200 cursor-not-allowed"
-                        : "bg-blue-100 hover:bg-blue-200"
-                    }`}
-                    disabled={isOutOfStock}
-                  >
-                    <div className="font-semibold">{upgrade.itemName}</div>
-                    <div className="text-sm">+£{upgrade.price.toFixed(2)}</div>
-                    {isOutOfStock && (
-                      <div className="text-red-500 text-xs mt-1">
-                        Out of stock
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-            <button
-              onClick={() => setShowUpgradePopup(false)}
-              className="mt-4 px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
-            >
-              No Thanks
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Sauce Popup */}
-      {showSaucePopup && selectedItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-40">
-          <div className="bg-white rounded-lg p-5 shadow-lg max-w-md w-full">
-            <h2 className="text-xl font-bold mb-5 text-purple-900">
-              Select Sauce for {selectedItem.itemName}
-            </h2>
-
-            {sauceOptions.length > 0 ? (
-              <div className="flex flex-wrap gap-3">
-                {sauceOptions.map((sauce, index) => (
-                  <button
-                    key={index}
-                    onClick={() => handleSelectSauce(sauce)}
-                    className="bg-green-300 hover:bg-green-300 text-black px-3 py-3 rounded text-sm"
-                  >
-                    {sauce}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="text-gray-300 mb-3">No sauces available</div>
-            )}
-
-            <button
-              onClick={() => handleSelectSauce(null)}
-              className="mt-4 px-4 py-2 bg-blue-700 text-white rounded hover:bg-blue-600"
-            >
-              No Sauce
-            </button>
-
-            <button
-              onClick={() => {
-                setShowSaucePopup(false);
-                setSelectedItem(null);
-              }}
-              className="mt-2 ml-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-600"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
 }
